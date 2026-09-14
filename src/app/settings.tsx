@@ -1,6 +1,7 @@
 import { useScreenState } from './screen-state';
 import { useEffect, useState } from "react";
 import { ProviderSettings } from './provider-settings';
+import type { LocalAgentStatus } from '../shared/local-agents';
 import {
   Check,
   Code2,
@@ -20,6 +21,11 @@ type Token = {
   name: string;
   createdAt: string;
   lastUsedAt?: string;
+};
+type LocalAgentBridge = {
+  enabled: boolean;
+  authorized: boolean;
+  runtimes: LocalAgentStatus[];
 };
 // GitHub mark from primer/octicons (MIT): github.com/primer/octicons.
 export function GitHubMark({ size = 19 }: { size?: number }) {
@@ -53,6 +59,7 @@ export function Settings({
   const [tab, setTab] = useScreenState('settings', initialTab, ['providers', 'agents', 'account'], true),
     [providers, setProviders] = useState<Provider[]>([]),
     [tokens, setTokens] = useState<Token[]>([]);
+  const [localAgents, setLocalAgents] = useState<LocalAgentBridge | null>(null);
   const [tokenName, setTokenName] = useState(''), [newToken, setNewToken] = useState('');
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
@@ -82,6 +89,15 @@ export function Settings({
     return () => {
       active = false;
     };
+  }, [tab]);
+  useEffect(() => {
+    if (tab !== 'agents') return;
+    let active = true;
+    setLocalAgents(null);
+    api<LocalAgentBridge>('/api/providers/local-agents')
+      .then(status => { if (active) setLocalAgents(status); })
+      .catch(e => { if (active) setError(message(e)); });
+    return () => { active = false; };
   }, [tab]);
   async function load() {
     const [p, t] = await Promise.all([
@@ -156,7 +172,50 @@ export function Settings({
           {tab === "providers" && <ProviderSettings providers={providers} onChanged={load} />}
           {tab === "agents" && (
             <>
-              <h3>A workspace your agents can use.</h3>
+              <h3>Agents can work both ways.</h3>
+              <p className="modal-description">
+                A trusted self-hosted Studio can launch Codex or Claude Code on
+                its own host. External agents can still connect into Studio
+                through MCP, WebMCP, or an API token.
+              </p>
+              <h4>Studio → local agents</h4>
+              {!localAgents ? (
+                <Busy label="Checking local agent runtimes…" />
+              ) : !localAgents.enabled ? (
+                <div className="integration-note">
+                  <Code2 size={20} />
+                  <div>
+                    <strong>Local agent bridge disabled</strong>
+                    <p>Set AGENT_BRIDGE_ENABLED=true on a self-hosted Node deployment. The bridge is intentionally off by default.</p>
+                  </div>
+                </div>
+              ) : !localAgents.authorized ? (
+                <div className="integration-note">
+                  <Code2 size={20} />
+                  <div>
+                    <strong>Account not authorized</strong>
+                    <p>The bootstrap administrator is allowed automatically. Other accounts must be listed in AGENT_BRIDGE_USER_IDS.</p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {localAgents.runtimes.map(runtime => (
+                    <div className="integration-note" key={runtime.id}>
+                      <Code2 size={20} />
+                      <div>
+                        <strong>{runtime.name}</strong>
+                        <p>{runtime.available ? `${runtime.version ?? 'Installed'} · available in the editor generation menu.` : 'Not found on the Studio host.'}</p>
+                      </div>
+                      {runtime.available && <span className="configured"><Check size={14} /> Ready</span>}
+                    </div>
+                  ))}
+                  {!localAgents.runtimes.some(runtime => runtime.available) && (
+                    <p className="small-copy">Install and authenticate Codex or Claude Code on the Studio host, then restart Studio. CODEX_BIN and CLAUDE_BIN can override executable paths.</p>
+                  )}
+                  <p className="small-copy">Local agents use the host CLI authentication. Studio does not copy their credentials into its provider database. Generated output is still validated and shown as a proposal before you apply it.</p>
+                </>
+              )}
+              <h4>Agents → Studio</h4>
               <p className="modal-description">
                 Connect an MCP client with this address. OAuth clients can
                 request access directly; API tokens work for scripts and the
