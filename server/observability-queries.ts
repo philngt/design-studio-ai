@@ -1,7 +1,6 @@
 import type { Context } from 'hono';
 import type { Env } from './types';
 import { fail, owner } from './security';
-import { isBootstrapAdminEmail } from './bootstrap-admin';
 import { telemetryQuerySchema, type TelemetryQuery, type TelemetrySummary, type TelemetryEvent } from '../src/shared/observability';
 import { coverage, eventColumns, maintainTelemetry } from './observability-store';
 import { posthogConfig } from './observability-posthog';
@@ -9,7 +8,7 @@ import { posthogConfig } from './observability-posthog';
 export function isObservabilityOperator(c: Context<Env>) {
   const user = c.get('user');
   return !!user && c.get('tokenKind') !== 'oauth' && (
-    isBootstrapAdminEmail(c.env, user.email) ||
+    c.get('bootstrapAdminId') === user.id ||
     (c.env.OBSERVABILITY_ADMIN_IDS ?? '').split(',').map(s => s.trim()).filter(Boolean).includes(user.id)
   );
 }
