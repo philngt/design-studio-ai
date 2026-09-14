@@ -23,7 +23,7 @@ test('App creation supports multiple mobile, tablet, and desktop targets', async
   await mobile.uncheck();
   await tablet.uncheck();
   await expect(desktop).toBeChecked();
-  await desktop.uncheck();
+  await desktop.click();
   await expect(desktop).toBeChecked();
 
   await mobile.check();
