@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createDocument, templates } from '../src/shared/catalog';
-import { documentSchema } from '../src/shared/schema';
+import { appPlatforms, documentSchema, kinds } from '../src/shared/schema';
 
 const targets = {
   mobile: { template: 'app-mobile', width: 393, height: 852 },
@@ -9,7 +9,10 @@ const targets = {
   desktop: { template: 'app-desktop', width: 1440, height: 900 },
 } as const;
 
-test('app templates create platform-specific valid documents', () => {
+test('App is one project kind with a single platform choice', () => {
+  assert.ok(kinds.includes('app'));
+  assert.deepEqual(appPlatforms, ['mobile', 'tablet', 'desktop']);
+
   for (const [platform, target] of Object.entries(targets)) {
     const document = createDocument('app', `${platform} app`, 'swiss', target.template);
     assert.equal(document.kind, 'app');
