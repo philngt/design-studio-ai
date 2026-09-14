@@ -2,8 +2,14 @@
   "name": "design-studio-ai",
   "version": "0.4.3",
   "private": true,
+  "description": "Agent-first design workspace for humans and AI agents",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/philngt/design-studio-ai.git"
+  },
+  "homepage": "https://github.com/philngt/design-studio-ai#readme",
   "engines": {
     "node": ">=24"
   },
