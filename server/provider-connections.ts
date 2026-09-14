@@ -4,6 +4,7 @@ import { decrypt, encrypt, fail, owner } from './security';
 import { authHeaderSchema, authMethodSchema, isCustomProvider, protocolSchema, providerDefaults, providerIdSchema, providerSettingsSchema, type AuthMethod, type ProviderProtocol } from '../src/shared/providers';
 import { isLocalAgentProviderId } from '../src/shared/local-agents';
 import { localAgentProviderMetadata } from './local-agent-access';
+import { localAgentRoutes } from './local-agent-routes';
 
 interface ProviderRow {
   provider: string; encrypted_key: string; base_url: string; model: string;
@@ -49,6 +50,7 @@ export function providerHeaders(config: { provider: string; key: string; authMet
   return { Authorization: `${config.provider === 'fal' ? 'Key' : 'Bearer'} ${config.key}` };
 }
 export const providerRoutes = new Hono<Env>();
+providerRoutes.route('/local-agents', localAgentRoutes);
 providerRoutes.get('/', async c => {
   const rows = await c.env.DB.prepare('SELECT * FROM providers WHERE user_id=?').bind(owner(c)).all<ProviderRow>();
   const providers = rows.results.filter(row => !isLocalAgentProviderId(row.provider)).map(connectionMetadata);
