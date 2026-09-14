@@ -18,6 +18,7 @@ const generateSchema = generationInputSchema.extend({
 export const localAgentRoutes = new Hono<Env>();
 
 localAgentRoutes.get('/', async c => {
+  owner(c);
   const enabled = localAgentBridgeEnabled(c);
   const authorized = enabled && await canUseLocalAgentBridge(c);
   const runtimes = authorized ? await c.env.AGENT_RUNNER!.list().catch(() => []) : [];
@@ -55,7 +56,7 @@ localAgentRoutes.post('/generate', async c => {
     system: motion ? motionSystem : system,
     prompt: body.prompt,
     ...(body.model ? { model: body.model } : {}),
-    outputSchema: z.toJSONSchema(motion ? motionProposalSchema : documentSchema),
+    outputSchema: motion ? z.toJSONSchema(motionProposalSchema) : z.toJSONSchema(documentSchema),
   });
 
   const currentBrief = await c.env.DB.prepare('SELECT revision FROM design_briefs WHERE project_id=? AND user_id=?')
