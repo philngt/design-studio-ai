@@ -5,11 +5,12 @@ import { validateCreativeDocument } from './creative-validation';
 import { characterSchema, characterInstanceSchema } from './character-schema';
 import { characterErrors, instanceErrors } from './character-validation';
 import { layoutSchema, sizingSchema, componentSchema, interactionSchema, timelineSchema, sceneObjectSchema, sceneSchema } from './design-capabilities';
+import { appManifestSchema, appTargetIds, type AppTarget } from './app-target-manifests';
 
 export const kinds = ['web', 'app', 'slides', 'report', 'wireframe', '3d', 'video'] as const;
 export type ProjectKind = typeof kinds[number];
-export const appPlatforms = ['mobile', 'tablet', 'desktop'] as const;
-export type AppPlatform = typeof appPlatforms[number];
+export const appPlatforms = appTargetIds;
+export type AppPlatform = AppTarget;
 const id = z.string().min(1).max(120).regex(/^[a-zA-Z0-9_-]+$/);
 const finite = z.number().finite();
 const coordinate = finite.min(-100000).max(100000);
@@ -45,7 +46,7 @@ const documentBaseSchema = z.object({
   pages: z.array(pageSchema).min(1).max(200),
   assets: z.array(z.object({ id, name: z.string().max(300), type: z.string().max(80), mimeType: z.string().max(100), url: z.string().max(2000000).refine(isSafeUrl), size: finite.min(0).optional() })).max(2000),
   designSystem: z.object({ id, version: z.number().int().positive(), name: z.string().max(200) }).optional(),
-  app: z.object({ platform: z.enum(appPlatforms) }).optional(),
+  app: appManifestSchema.optional(),
   presentation: z.object({ interval: finite.min(1).max(600), loop: z.boolean() }).optional(),
   timeline: timelineSchema.optional(),
   metadata: z.object({ createdAt: z.iso.datetime(), updatedAt: z.iso.datetime() })
@@ -57,8 +58,8 @@ export const documentSchema = z.discriminatedUnion('schemaVersion', [legacyDocum
   const nodeIds = new Set<string>();
   let total = 0;
   const unique = (value: string) => { if (allIds.has(value)) ctx.addIssue({ code: 'custom', message: `Duplicate ID: ${value}` }); allIds.add(value); };
-  if (doc.kind === 'app' && !doc.app) ctx.addIssue({ code: 'custom', message: 'App documents require a mobile, tablet, or desktop platform.' });
-  if (doc.kind !== 'app' && doc.app) ctx.addIssue({ code: 'custom', message: 'App platform metadata is only valid for app documents.' });
+  if (doc.kind === 'app' && !doc.app) ctx.addIssue({ code: 'custom', message: 'App documents require at least one target manifest.' });
+  if (doc.kind !== 'app' && doc.app) ctx.addIssue({ code: 'custom', message: 'App target metadata is only valid for app documents.' });
   const characters = new Map((doc.characters ?? []).map(c => [c.id, c]));
   if (doc.schemaVersion === 1 && (doc.characters?.length || doc.pages.some(p => p.nodes.some(n => n.character || n.type === 'character')))) ctx.addIssue({ code:'custom',message:'Characters require document schemaVersion 2' });
   let characterKeys=0, characterVertices=0;
