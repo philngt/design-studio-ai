@@ -1,16 +1,15 @@
 import { test, expect } from '@playwright/test';
 
-test('App creation exposes mobile, tablet, and desktop targets', async ({ page }) => {
+test('App creation exposes mobile, tablet, and desktop as one target choice', async ({ page }) => {
   await page.goto('/');
 
   await page.getByRole('group', { name: 'Design type' }).getByRole('button', { name: 'App' }).click();
 
-  const targets = page.getByRole('group', { name: 'App platform' });
-  await expect(targets.getByRole('button', { name: 'Mobile' })).toBeVisible();
-  await expect(targets.getByRole('button', { name: 'Tablet' })).toBeVisible();
-  await expect(targets.getByRole('button', { name: 'Desktop' })).toBeVisible();
-  await expect(targets.getByRole('button', { name: 'Mobile' })).toHaveClass(/selected/);
+  const target = page.getByRole('combobox', { name: 'App target' });
+  await expect(target).toBeVisible();
+  await expect(target).toHaveValue('mobile');
+  await expect(target.locator('option')).toHaveText(['Mobile', 'Tablet', 'Desktop']);
 
-  await targets.getByRole('button', { name: 'Tablet' }).click();
-  await expect(targets.getByRole('button', { name: 'Tablet' })).toHaveClass(/selected/);
+  await target.selectOption('tablet');
+  await expect(target).toHaveValue('tablet');
 });
