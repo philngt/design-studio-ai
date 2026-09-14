@@ -6,7 +6,22 @@ The live application is [studio.agentkit.best](https://studio.agentkit.best). Cl
 
 Install Node 24+, then run `npm ci`, `npm ci --prefix packages/cli`, `npm run build:cli`, `npx playwright install chromium`, and `npm run build`. Linux may require `npx playwright install --with-deps chromium`.
 
-Set the server process environment. PowerShell:
+For the normal self-host flow, copy the environment template and edit `.env`:
+
+```sh
+cp .env.example .env
+node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
+```
+
+Put the generated stable `ENCRYPTION_KEY`, canonical `APP_URL`, and any optional bootstrap-admin/provider settings in `.env`, then run:
+
+```sh
+npm start
+```
+
+`npm start` uses Node's native `--env-file-if-exists=.env` support, so no `dotenv` package is required. Variables already present in the process environment take precedence over values from `.env`; this lets production secret managers override local defaults cleanly. Keep the encryption key stable across restarts. Never commit a real `.env` file.
+
+You may still inject variables directly when preferred. PowerShell:
 
 ```powershell
 $env:ENCRYPTION_KEY = '<your stable 32-byte base64 key>'
@@ -23,8 +38,6 @@ export APP_URL='http://localhost:8787'
 export DATA_DIR='./data'
 npm start
 ```
-
-Generate a key once using `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"` and store it securely. Keep it stable across restarts. The Node server does not load `.env` automatically. To load a dedicated local file explicitly, use `node --env-file=.env.local --import tsx server/node.ts`; never commit that file.
 
 `APP_URL` must be the canonical external origin, including HTTPS behind a reverse proxy. It controls OAuth audience/URLs and origin checks. Node binds to `127.0.0.1` by default; use `HOST=0.0.0.0` for a container or trusted network. Port defaults to 8787. SQLite and assets persist under `DATA_DIR`; missing SQL migrations apply transactionally at startup. Set `ALLOW_REGISTRATION=false` to close public signup, and `NODE_ENV=production` for an exposed Node server. Configure `TRUSTED_ORIGINS` only for actual trusted application origins.
 
