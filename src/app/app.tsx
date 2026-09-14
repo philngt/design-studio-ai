@@ -26,11 +26,13 @@ import {
   Search,
   Settings2,
   SlidersHorizontal,
+  Smartphone,
   Sparkles,
+  Tablet,
   Trash2,
   X,
 } from "lucide-react";
-import type { DesignDocument, Project } from "../shared/schema";
+import type { AppPlatform, DesignDocument, Project } from "../shared/schema";
 import { createDocument, templates, themes } from "../shared/catalog";
 import { renderSvg } from "../shared/render";
 import { api, post, put, message, type User, type Provider } from "./api";
@@ -63,6 +65,12 @@ const kinds: {
     description: "Give your idea a home",
   },
   {
+    id: "app",
+    name: "App",
+    icon: Smartphone,
+    description: "Design for mobile, tablet, or desktop",
+  },
+  {
     id: "slides",
     name: "Presentation",
     icon: Presentation,
@@ -93,6 +101,18 @@ const kinds: {
     description: "Set your ideas in motion",
   },
 ];
+const appTargets: {
+  id: AppPlatform;
+  name: string;
+  icon: typeof Monitor;
+  template: string;
+}[] = [
+  { id: "mobile", name: "Mobile", icon: Smartphone, template: "app-mobile" },
+  { id: "tablet", name: "Tablet", icon: Tablet, template: "app-tablet" },
+  { id: "desktop", name: "Desktop", icon: Monitor, template: "app-desktop" },
+];
+const appTemplate = (platform: AppPlatform) =>
+  appTargets.find((target) => target.id === platform)?.template || "app-mobile";
 type Summary = Omit<Project, "document"> & { document?: DesignDocument };
 type Draft = {
   kind: Kind;
@@ -138,6 +158,7 @@ function githubReturn() {
   let saved: {
     prompt: string;
     kind: Kind;
+    appPlatform: AppPlatform;
     theme: string;
     draft: Draft | null;
     imported: boolean;
@@ -160,6 +181,9 @@ function githubReturn() {
         const kind = kinds.some((k) => k.id === data.kind)
           ? (data.kind as Kind)
           : "web";
+        const appPlatform = appTargets.some((target) => target.id === data.appPlatform)
+          ? (data.appPlatform as AppPlatform)
+          : "mobile";
         const source =
           data.draft && typeof data.draft === "object"
             ? (data.draft as Record<string, unknown>)
@@ -172,6 +196,7 @@ function githubReturn() {
           workspace: typeof data.workspace === 'string' && Object.hasOwn(workspacePaths, data.workspace) ? data.workspace as WorkspaceTab : undefined,
           prompt: text(data.prompt),
           kind,
+          appPlatform,
           theme: text(data.theme, 120),
           imported: data.imported === true,
           agents: data.agents === true,
@@ -236,6 +261,7 @@ export function App() {
     [busy, setBusy] = useState(false);
   const [prompt, setPrompt] = useState(""),
     [kind, setKind] = useState<Kind>("web"),
+    [appPlatform, setAppPlatform] = useState<AppPlatform>(oauthReturn.saved?.appPlatform || "mobile"),
     [theme, setTheme] = useScreenState("theme", "", ["", ...themes.map(t => t.id)]),
     [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all"),
@@ -328,6 +354,7 @@ export function App() {
       }
       setPrompt(oauthReturn.saved.prompt);
       setKind(oauthReturn.saved.kind);
+      setAppPlatform(oauthReturn.saved.appPlatform);
       setTheme(oauthReturn.saved.theme);
       setDraft(oauthReturn.saved.draft);
     }
@@ -351,6 +378,7 @@ export function App() {
           workspace: tab,
           prompt,
           kind,
+          appPlatform,
           theme,
           imported: Boolean(draft?.document),
           agents: agentsRequested,
@@ -443,13 +471,16 @@ export function App() {
         }));
   function begin(selectedKind = kind, template?: string) {
     setError("");
+    const selectedTarget = appTargets.find((target) => target.template === template);
+    if (selectedTarget) setAppPlatform(selectedTarget.id);
     if (prompt.trim() && !template) {
       setKind(selectedKind);
       setPendingInterview(true);
       if (!user) setAuth(true);
       return;
     }
-    writeScreen({ template: template || selectedKind });
+    const resolvedTemplate = template || (selectedKind === "app" ? appTemplate(appPlatform) : undefined);
+    writeScreen({ template: resolvedTemplate || selectedKind });
     setDraft({
       kind: selectedKind,
       name: "",
@@ -457,10 +488,10 @@ export function App() {
       audience: "",
       theme:
         theme ||
-        templates.find((t) => t.id === template)?.themeId ||
+        templates.find((t) => t.id === resolvedTemplate)?.themeId ||
         themes[0]?.id ||
         "",
-      template,
+      template: resolvedTemplate,
     });
   }
   useEffect(() => {
@@ -469,6 +500,8 @@ export function App() {
       if (!id) { setDraft(null); return; }
       const preset = templates.find(t => t.id === id);
       const selectedKind = preset?.kind || kinds.find(k => k.id === id)?.id;
+      const selectedTarget = appTargets.find(target => target.template === preset?.id);
+      if (selectedTarget) setAppPlatform(selectedTarget.id);
       if (selectedKind) setDraft(current => current?.template === preset?.id && current?.kind === selectedKind ? current : { kind: selectedKind, name: "", prompt: "", audience: "", theme: preset?.themeId || themes[0].id, template: preset?.id });
     };
     if (screenParam("template")) restore(); window.addEventListener("popstate", restore);
@@ -506,6 +539,7 @@ export function App() {
           kind,
           request.split("\n")[0]!.slice(0, 72),
           theme || undefined,
+          kind === "app" ? appTemplate(appPlatform) : undefined,
         );
         document.pages = [{ ...document.pages[0]!, nodes: [] }];
         if (document.timeline) document.timeline.tracks = [];
@@ -533,7 +567,7 @@ export function App() {
         setBusy(false);
       }
     })();
-  }, [pendingInterview, user, prompt, kind, theme]);
+  }, [pendingInterview, user, prompt, kind, appPlatform, theme]);
   async function create(blank = false) {
     if (!draft) return;
     if (!user) {
@@ -635,6 +669,7 @@ export function App() {
         document: result.document,
         importNotice: result.notice,
       });
+      if (result.document.kind === 'app' && result.document.app) setAppPlatform(result.document.app.platform);
       setNotice(result.notice);
     } catch (e) {
       setError(message(e));
@@ -821,6 +856,24 @@ export function App() {
                     </button>
                   ))}
                 </div>
+                {kind === "app" && (
+                  <div
+                    className="kind-picker app-platform-picker"
+                    role="group"
+                    aria-label="App platform"
+                  >
+                    {appTargets.map((target) => (
+                      <button
+                        key={target.id}
+                        className={appPlatform === target.id ? "selected" : ""}
+                        onClick={() => setAppPlatform(target.id)}
+                      >
+                        <target.icon size={17} />
+                        {target.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </section>
             )}
             {tab === "activity" ? (
@@ -1202,7 +1255,10 @@ export function App() {
               <p className="import-summary">{draft.importNotice}</p>
             )}
             <div className="brief-kind">
-              <span>{kinds.find((k) => k.id === draft.kind)?.name}</span>
+              <span>
+                {kinds.find((k) => k.id === draft.kind)?.name}
+                {draft.kind === "app" && ` · ${appTargets.find((target) => target.template === draft.template)?.name || appPlatform}`}
+              </span>
               <span>
                 {draft.document ? "Imported document" : "Editable template"}
               </span>
