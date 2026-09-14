@@ -56,5 +56,5 @@ export interface User {
 }
 export type Env = {
   Bindings: Bindings;
-  Variables: { user: User | null; authMethod: "session" | "token" | null; tokenKind: 'api' | 'oauth' | null; telemetrySpan?: import('./observability').TelemetrySpan; telemetryErrorCode?: string };
+  Variables: { user: User | null; authMethod: "session" | "token" | null; tokenKind: 'api' | 'oauth' | null; bootstrapAdminId?: string; telemetrySpan?: import('./observability').TelemetrySpan; telemetryErrorCode?: string };
 };
