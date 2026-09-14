@@ -819,6 +819,22 @@ export function App() {
                           ))}
                         </select>
                       </label>
+                      {kind === "app" && (
+                        <label className="composer-select">
+                          <Smartphone size={16} />
+                          <select
+                            aria-label="App target"
+                            value={appPlatform}
+                            onChange={(e) => setAppPlatform(e.target.value as AppPlatform)}
+                          >
+                            {appTargets.map((target) => (
+                              <option key={target.id} value={target.id}>
+                                {target.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
                     </div>
                     <button
                       className="button primary"
@@ -856,24 +872,6 @@ export function App() {
                     </button>
                   ))}
                 </div>
-                {kind === "app" && (
-                  <div
-                    className="kind-picker app-platform-picker"
-                    role="group"
-                    aria-label="App platform"
-                  >
-                    {appTargets.map((target) => (
-                      <button
-                        key={target.id}
-                        className={appPlatform === target.id ? "selected" : ""}
-                        onClick={() => setAppPlatform(target.id)}
-                      >
-                        <target.icon size={17} />
-                        {target.name}
-                      </button>
-                    ))}
-                  </div>
-                )}
               </section>
             )}
             {tab === "activity" ? (
@@ -1263,6 +1261,24 @@ export function App() {
                 {draft.document ? "Imported document" : "Editable template"}
               </span>
             </div>
+            {draft.kind === "app" && !draft.document && (
+              <Field label="App target">
+                <select
+                  value={appPlatform}
+                  onChange={(e) => {
+                    const next = e.target.value as AppPlatform;
+                    setAppPlatform(next);
+                    setDraft({ ...draft, template: appTemplate(next) });
+                  }}
+                >
+                  {appTargets.map((target) => (
+                    <option key={target.id} value={target.id}>
+                      {target.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
             <Field label="Project name">
               <input
                 autoFocus
