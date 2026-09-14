@@ -8,6 +8,7 @@ import { FileBucket, SqliteDatabase, staticAssets } from "./node-adapters";
 import type { Bindings } from "./types";
 import { launchExportBrowser } from './export-node';
 import { ensureBootstrapAdmin } from './bootstrap-admin';
+import { createNodeLocalAgentRunner } from './local-agent-runner-node';
 const dataDir = resolve(process.env.DATA_DIR ?? "data");
 await mkdir(dataDir, { recursive: true });
 const db = new SqliteDatabase(resolve(dataDir, "studio.sqlite"));
@@ -44,6 +45,9 @@ const env: Bindings = {
   ASSETS_BUCKET: new FileBucket(resolve(dataDir, "assets")),
   ASSETS: staticAssets(resolve("dist")),
   EXPORT_BROWSER: launchExportBrowser,
+  AGENT_RUNNER: createNodeLocalAgentRunner(),
+  AGENT_BRIDGE_ENABLED: process.env.AGENT_BRIDGE_ENABLED ?? 'false',
+  AGENT_BRIDGE_USER_IDS: process.env.AGENT_BRIDGE_USER_IDS,
   APP_URL: process.env.APP_URL ?? `http://localhost:${port}`,
   ALLOW_REGISTRATION: process.env.ALLOW_REGISTRATION ?? "true",
   BOOTSTRAP_ADMIN_EMAIL: process.env.BOOTSTRAP_ADMIN_EMAIL,
