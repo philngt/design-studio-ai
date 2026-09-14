@@ -1,4 +1,5 @@
 import type { AuthMethod, ProviderProtocol } from '../shared/providers';
+import { isLocalAgentProviderId } from '../shared/local-agents';
 import { trackClient, trackClientFailure } from './analytics';
 export class ApiError extends Error {
   constructor(
@@ -54,6 +55,16 @@ export async function api<T>(
   return data as T;
 }
 export function post<T>(path: string, body: unknown = {}): Promise<T> {
+  const generate = /^\/api\/projects\/([^/?]+)\/generate$/.exec(path);
+  if (generate && body && typeof body === 'object' && !Array.isArray(body)) {
+    const provider = (body as { provider?: unknown }).provider;
+    if (typeof provider === 'string' && isLocalAgentProviderId(provider)) {
+      return api<T>('/api/providers/local-agents/generate', {
+        method: 'POST',
+        body: JSON.stringify({ ...body, projectId: generate[1] }),
+      });
+    }
+  }
   return api<T>(path, { method: "POST", body: JSON.stringify(body) });
 }
 export function put<T>(path: string, body: unknown): Promise<T> {
@@ -91,5 +102,6 @@ export type Provider = {
   model?: string;
   apiKey?: string;
   baseUrl?: string;
+  localAgent?: { id: string; version: string | null };
 };
 export type User = { id: string; name: string; email: string };
