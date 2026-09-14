@@ -24,17 +24,6 @@ function rawConfig(env: Bindings) {
   return bootstrapAdminSchema.parse({ email, password, name });
 }
 
-/** Returns the configured bootstrap-admin email without exposing any credential. */
-export function bootstrapAdminEmail(env: Bindings): string | null {
-  const email = env.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase();
-  return email || null;
-}
-
-export function isBootstrapAdminEmail(env: Bindings, email: string | null | undefined): boolean {
-  const configured = bootstrapAdminEmail(env);
-  return !!configured && configured === email?.trim().toLowerCase();
-}
-
 /**
  * Creates the configured admin account once. An existing account is adopted only when
  * the configured password already matches it; credentials and profile data are never overwritten.
@@ -79,10 +68,6 @@ export function ensureBootstrapAdmin(env: Bindings): Promise<BootstrapAdminResul
 }
 
 export async function isBootstrapAdminUserId(env: Bindings, userId: string): Promise<boolean> {
-  const configured = bootstrapAdminEmail(env);
-  if (!configured) return false;
-  const user = await env.DB.prepare('SELECT email FROM users WHERE id=?')
-    .bind(userId)
-    .first<{ email: string }>();
-  return isBootstrapAdminEmail(env, user?.email);
+  const admin = await ensureBootstrapAdmin(env);
+  return admin?.id === userId;
 }
