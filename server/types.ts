@@ -35,6 +35,9 @@ export interface Bindings {
   ENCRYPTION_KEY?: string;
   APP_URL?: string;
   ALLOW_REGISTRATION?: string;
+  BOOTSTRAP_ADMIN_EMAIL?: string;
+  BOOTSTRAP_ADMIN_PASSWORD?: string;
+  BOOTSTRAP_ADMIN_NAME?: string;
   PROVIDER_ALLOWED_ORIGINS?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_FONTS_API_KEY?: string;
