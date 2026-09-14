@@ -90,7 +90,8 @@ export const observabilityMiddleware: MiddlewareHandler<Env> = async (c, next) =
   if (!(c.req.path.startsWith('/api/') || c.req.path === '/mcp' || c.req.path.startsWith('/oauth/'))) return next();
   // Provisioning is cached per database binding. This keeps bootstrap accounts available in
   // Cloudflare/serverless runtimes as well as the explicit self-host startup path.
-  await ensureBootstrapAdmin(c.env);
+  const bootstrapAdmin = await ensureBootstrapAdmin(c.env);
+  if (bootstrapAdmin) c.set('bootstrapAdminId', bootstrapAdmin.id);
   // Observation reads must not populate their own dashboard or trigger a refresh feedback loop.
   if (c.req.path.startsWith('/api/observability/') || ['/api/health', '/api/config', '/api/schema', '/api/catalog', '/api/openapi'].includes(c.req.path)) return next();
   await maintainTelemetry(c.env);
