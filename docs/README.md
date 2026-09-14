@@ -11,6 +11,7 @@ Start here when maintaining Design Studio AI. The [root README](../README.md) in
 | Configure hosting, secrets, storage, backups, or rollback | [Deployment](deployment.md) |
 | Pre-create the initial self-host administrator safely | [Bootstrap admin](bootstrap-admin.md) |
 | Connect an external agent through the product's API, MCP, WebMCP, or CLI | [Agent access](agents.md) |
+| Let Studio launch host-local Codex or Claude Code safely | [Local agent bridge](local-agent-bridge.md) |
 | Understand provider setup and source-media constraints | [Providers](providers.md) |
 | Maintain the public documentation portal, beginner guide, and discovery output | [Web documentation](web-documentation.md) |
 
