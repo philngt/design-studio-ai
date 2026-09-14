@@ -2,6 +2,8 @@ import { Hono, type Context } from 'hono';
 import type { Env } from './types';
 import { decrypt, encrypt, fail, owner } from './security';
 import { authHeaderSchema, authMethodSchema, isCustomProvider, protocolSchema, providerDefaults, providerIdSchema, providerSettingsSchema, type AuthMethod, type ProviderProtocol } from '../src/shared/providers';
+import { isLocalAgentProviderId } from '../src/shared/local-agents';
+import { localAgentProviderMetadata } from './local-agent-access';
 
 interface ProviderRow {
   provider: string; encrypted_key: string; base_url: string; model: string;
@@ -28,6 +30,7 @@ export function allowedProviderBase(provider: string, base: string, allowlist = 
 }
 export async function providerConfig(c: Context<Env>, provider: string) {
   providerIdSchema.parse(provider);
+  if (isLocalAgentProviderId(provider)) fail(400, 'local_agent_managed', 'Local agent runtimes are managed by the studio host, not provider settings.');
   const row = await c.env.DB.prepare('SELECT * FROM providers WHERE user_id=? AND provider=?').bind(owner(c), provider).first<ProviderRow>();
   if (!row) fail(400, 'provider_unconfigured', 'Add your provider connection in Settings first.');
   allowedProviderBase(provider, row.base_url, c.env.PROVIDER_ALLOWED_ORIGINS);
@@ -48,10 +51,13 @@ export function providerHeaders(config: { provider: string; key: string; authMet
 export const providerRoutes = new Hono<Env>();
 providerRoutes.get('/', async c => {
   const rows = await c.env.DB.prepare('SELECT * FROM providers WHERE user_id=?').bind(owner(c)).all<ProviderRow>();
-  return c.json({ providers: rows.results.map(connectionMetadata) });
+  const providers = rows.results.filter(row => !isLocalAgentProviderId(row.provider)).map(connectionMetadata);
+  providers.push(...await localAgentProviderMetadata(c));
+  return c.json({ providers });
 });
 providerRoutes.put('/:provider', async c => {
   const provider = providerIdSchema.parse(c.req.param('provider'));
+  if (isLocalAgentProviderId(provider)) fail(400, 'local_agent_managed', 'Local agent runtimes are configured by the studio host.');
   const body = providerSettingsSchema.parse(await c.req.json());
   const existing = await c.env.DB.prepare('SELECT * FROM providers WHERE user_id=? AND provider=?').bind(owner(c), provider).first<ProviderRow>();
   const defaults = providerDefaults(provider), custom = isCustomProvider(provider);
@@ -81,6 +87,7 @@ providerRoutes.put('/:provider', async c => {
 });
 providerRoutes.delete('/:provider', async c => {
   const provider = providerIdSchema.parse(c.req.param('provider'));
+  if (isLocalAgentProviderId(provider)) fail(400, 'local_agent_managed', 'Local agent runtimes are configured by the studio host.');
   await c.env.DB.prepare('DELETE FROM providers WHERE user_id=? AND provider=?').bind(owner(c), provider).run();
   return c.json({ ok: true });
 });
