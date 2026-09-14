@@ -7,6 +7,7 @@ import { app } from "./index";
 import { FileBucket, SqliteDatabase, staticAssets } from "./node-adapters";
 import type { Bindings } from "./types";
 import { launchExportBrowser } from './export-node';
+import { ensureBootstrapAdmin } from './bootstrap-admin';
 const dataDir = resolve(process.env.DATA_DIR ?? "data");
 await mkdir(dataDir, { recursive: true });
 const db = new SqliteDatabase(resolve(dataDir, "studio.sqlite"));
@@ -45,6 +46,9 @@ const env: Bindings = {
   EXPORT_BROWSER: launchExportBrowser,
   APP_URL: process.env.APP_URL ?? `http://localhost:${port}`,
   ALLOW_REGISTRATION: process.env.ALLOW_REGISTRATION ?? "true",
+  BOOTSTRAP_ADMIN_EMAIL: process.env.BOOTSTRAP_ADMIN_EMAIL,
+  BOOTSTRAP_ADMIN_PASSWORD: process.env.BOOTSTRAP_ADMIN_PASSWORD,
+  BOOTSTRAP_ADMIN_NAME: process.env.BOOTSTRAP_ADMIN_NAME,
   COMMUNITY_ENABLED: process.env.COMMUNITY_ENABLED ?? 'false',
   COMMUNITY_ADMIN_IDS: process.env.COMMUNITY_ADMIN_IDS,
   COMMUNITY_ADMIN_EMAILS: process.env.COMMUNITY_ADMIN_EMAILS,
@@ -63,6 +67,8 @@ const env: Bindings = {
       ? ""
       : "http://localhost:5173,http://127.0.0.1:5173"),
 };
+const bootstrapAdmin = await ensureBootstrapAdmin(env);
+if (bootstrapAdmin) console.log(`Bootstrap admin account ${bootstrapAdmin.created ? 'created' : 'ready'}.`);
 const server = serve(
   {
     fetch: (request, connection) => {
