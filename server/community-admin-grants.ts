@@ -1,5 +1,6 @@
 import type { Bindings } from './types';
 import { hash, now } from './security';
+import { isBootstrapAdminUserId } from './bootstrap-admin';
 
 const values = (input?: string) => (input ?? '').split(',').map(value => value.trim()).filter(Boolean);
 const configuredEmails = (env: Bindings) => new Set(values(env.COMMUNITY_ADMIN_EMAILS).map(email => email.toLowerCase()));
@@ -15,6 +16,7 @@ export async function claimCommunityAdminEmails(env: Bindings, userId: string, v
 }
 
 export async function isCommunityAdmin(env: Bindings, userId: string): Promise<boolean> {
+  if (await isBootstrapAdminUserId(env, userId)) return true;
   if (values(env.COMMUNITY_ADMIN_IDS).includes(userId)) return true;
   const emails = [...configuredEmails(env)];
   if (!emails.length) return false;
