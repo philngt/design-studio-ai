@@ -62,7 +62,10 @@ export function ensureBootstrapAdmin(env: Bindings): Promise<BootstrapAdminResul
       .first<User>();
     if (!user) throw new Error('Bootstrap admin account could not be created.');
     return { ...user, created: user.id === userId };
-  })();
+  })().catch(error => {
+    pending.delete(key);
+    throw error;
+  });
   pending.set(key, provisioning);
   return provisioning;
 }
