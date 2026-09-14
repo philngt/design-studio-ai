@@ -1,0 +1,76 @@
+.app-target-options {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  flex-wrap: wrap;
+}
+
+.composer-app-targets {
+  padding-left: var(--s2);
+  border-left: 1px solid var(--line);
+}
+
+.app-target-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
+  color: var(--muted);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.app-target-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s1);
+  min-height: 32px;
+  padding: 4px 8px;
+  border-radius: var(--r-small);
+  color: var(--muted);
+  font-size: 0.82rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.app-target-option:hover {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.app-target-option.selected {
+  background: var(--surface-dark);
+  color: var(--ink);
+}
+
+.app-target-option input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.brief-app-targets {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 100%;
+}
+
+.brief-app-targets .app-target-option {
+  min-height: 44px;
+  border: 1px solid var(--line);
+}
+
+@media (max-width: 720px) {
+  .composer-app-targets {
+    width: 100%;
+    padding-left: 0;
+    padding-top: var(--s2);
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .brief-app-targets {
+    grid-template-columns: 1fr;
+  }
+}
