@@ -9,6 +9,7 @@ Start here when maintaining Design Studio AI. The [root README](../README.md) in
 | Maintain creative boards, paint persistence and public-source boundaries | [Creative tools](creative-tools.md) |
 | Rig and animate native 2D characters | [Character motion](character-motion.md) |
 | Configure hosting, secrets, storage, backups, or rollback | [Deployment](deployment.md) |
+| Pre-create the initial self-host administrator safely | [Bootstrap admin](bootstrap-admin.md) |
 | Connect an external agent through the product's API, MCP, WebMCP, or CLI | [Agent access](agents.md) |
 | Understand provider setup and source-media constraints | [Providers](providers.md) |
 | Maintain the public documentation portal, beginner guide, and discovery output | [Web documentation](web-documentation.md) |

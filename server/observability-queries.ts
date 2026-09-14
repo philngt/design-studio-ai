@@ -6,7 +6,11 @@ import { coverage, eventColumns, maintainTelemetry } from './observability-store
 import { posthogConfig } from './observability-posthog';
 
 export function isObservabilityOperator(c: Context<Env>) {
-  return !!c.get('user') && c.get('tokenKind') !== 'oauth' && (c.env.OBSERVABILITY_ADMIN_IDS ?? '').split(',').map(s => s.trim()).filter(Boolean).includes(c.get('user')!.id);
+  const user = c.get('user');
+  return !!user && c.get('tokenKind') !== 'oauth' && (
+    c.get('bootstrapAdminId') === user.id ||
+    (c.env.OBSERVABILITY_ADMIN_IDS ?? '').split(',').map(s => s.trim()).filter(Boolean).includes(user.id)
+  );
 }
 export function telemetryFilter(c: Context<Env>) {
   const actor = owner(c), query = telemetryQuerySchema.parse(c.req.query());
