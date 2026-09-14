@@ -26,11 +26,13 @@ import {
   Search,
   Settings2,
   SlidersHorizontal,
+  Smartphone,
   Sparkles,
+  Tablet,
   Trash2,
   X,
 } from "lucide-react";
-import type { DesignDocument, Project } from "../shared/schema";
+import type { AppPlatform, DesignDocument, Project } from "../shared/schema";
 import { createDocument, templates, themes } from "../shared/catalog";
 import { renderSvg } from "../shared/render";
 import { api, post, put, message, type User, type Provider } from "./api";
@@ -48,6 +50,7 @@ import { resumeCommunitySignIn } from './community-navigation';
 import { CommunityJobStatus } from './community-job-status';
 import type { CommunityJob } from '../shared/community';
 import { useCommunityEnabled, storedCommunityImport } from './community-client';
+import './app-target-options.css';
 
 type Kind = DesignDocument["kind"];
 const kinds: {
@@ -61,6 +64,12 @@ const kinds: {
     name: "Website",
     icon: Monitor,
     description: "Give your idea a home",
+  },
+  {
+    id: "app",
+    name: "App",
+    icon: Smartphone,
+    description: "Design for mobile, tablet, or desktop",
   },
   {
     id: "slides",
@@ -93,6 +102,32 @@ const kinds: {
     description: "Set your ideas in motion",
   },
 ];
+const appTargetOptions: {
+  id: AppPlatform;
+  name: string;
+  icon: typeof Monitor;
+  template: string;
+}[] = [
+  { id: "mobile", name: "Mobile", icon: Smartphone, template: "app-mobile" },
+  { id: "tablet", name: "Tablet", icon: Tablet, template: "app-tablet" },
+  { id: "desktop", name: "Desktop", icon: Monitor, template: "app-desktop" },
+];
+const appTemplate = (platform: AppPlatform) =>
+  appTargetOptions.find((target) => target.id === platform)?.template || "app-mobile";
+const normalizedAppTargets = (values: readonly AppPlatform[] | undefined): AppPlatform[] => {
+  const selected = new Set(values?.length ? values : ["mobile"]);
+  return appTargetOptions.filter(target => selected.has(target.id)).map(target => target.id);
+};
+const toggledAppTargets = (current: readonly AppPlatform[], target: AppPlatform): AppPlatform[] => {
+  const selected = new Set(current);
+  if (selected.has(target)) {
+    if (selected.size === 1) return [...current];
+    selected.delete(target);
+  } else selected.add(target);
+  return appTargetOptions.filter(option => selected.has(option.id)).map(option => option.id);
+};
+const appTargetLabel = (targets: readonly AppPlatform[]) =>
+  appTargetOptions.filter(target => targets.includes(target.id)).map(target => target.name).join(" + ");
 type Summary = Omit<Project, "document"> & { document?: DesignDocument };
 type Draft = {
   kind: Kind;
@@ -101,6 +136,7 @@ type Draft = {
   audience: string;
   theme: string;
   template?: string;
+  appTargets?: AppPlatform[];
   document?: DesignDocument;
   importNotice?: string;
 };
@@ -138,6 +174,7 @@ function githubReturn() {
   let saved: {
     prompt: string;
     kind: Kind;
+    appTargets: AppPlatform[];
     theme: string;
     draft: Draft | null;
     imported: boolean;
@@ -160,6 +197,12 @@ function githubReturn() {
         const kind = kinds.some((k) => k.id === data.kind)
           ? (data.kind as Kind)
           : "web";
+        const storedTargets = Array.isArray(data.appTargets)
+          ? data.appTargets.filter((value): value is AppPlatform => appTargetOptions.some(target => target.id === value))
+          : appTargetOptions.some(target => target.id === data.appPlatform)
+            ? [data.appPlatform as AppPlatform]
+            : ["mobile" as AppPlatform];
+        const appTargets = normalizedAppTargets(storedTargets);
         const source =
           data.draft && typeof data.draft === "object"
             ? (data.draft as Record<string, unknown>)
@@ -168,10 +211,14 @@ function githubReturn() {
           source && kinds.some((k) => k.id === source.kind)
             ? (source.kind as Kind)
             : kind;
+        const draftTargets = source && Array.isArray(source.appTargets)
+          ? normalizedAppTargets(source.appTargets.filter((value): value is AppPlatform => appTargetOptions.some(target => target.id === value)))
+          : appTargets;
         saved = {
           workspace: typeof data.workspace === 'string' && Object.hasOwn(workspacePaths, data.workspace) ? data.workspace as WorkspaceTab : undefined,
           prompt: text(data.prompt),
           kind,
+          appTargets,
           theme: text(data.theme, 120),
           imported: data.imported === true,
           agents: data.agents === true,
@@ -184,6 +231,7 @@ function githubReturn() {
                   prompt: text(source.prompt),
                   audience: text(source.audience, 10000),
                   theme: text(source.theme, 120),
+                  ...(draftKind === "app" ? { appTargets: draftTargets } : {}),
                   ...(typeof source.template === "string" &&
                   templates.some((t) => t.id === source.template)
                     ? { template: source.template }
@@ -236,6 +284,7 @@ export function App() {
     [busy, setBusy] = useState(false);
   const [prompt, setPrompt] = useState(""),
     [kind, setKind] = useState<Kind>("web"),
+    [selectedAppTargets, setSelectedAppTargets] = useState<AppPlatform[]>(oauthReturn.saved?.appTargets || ["mobile"]),
     [theme, setTheme] = useScreenState("theme", "", ["", ...themes.map(t => t.id)]),
     [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all"),
@@ -328,6 +377,7 @@ export function App() {
       }
       setPrompt(oauthReturn.saved.prompt);
       setKind(oauthReturn.saved.kind);
+      setSelectedAppTargets(oauthReturn.saved.appTargets);
       setTheme(oauthReturn.saved.theme);
       setDraft(oauthReturn.saved.draft);
     }
@@ -351,6 +401,7 @@ export function App() {
           workspace: tab,
           prompt,
           kind,
+          appTargets: selectedAppTargets,
           theme,
           imported: Boolean(draft?.document),
           agents: agentsRequested,
@@ -362,6 +413,7 @@ export function App() {
                 prompt: draft.prompt,
                 audience: draft.audience,
                 theme: draft.theme,
+                appTargets: draft.appTargets,
                 template: draft.template,
               }
             : null,
@@ -443,13 +495,19 @@ export function App() {
         }));
   function begin(selectedKind = kind, template?: string) {
     setError("");
+    const selectedTarget = appTargetOptions.find((target) => target.template === template);
+    const nextTargets = selectedKind === "app"
+      ? selectedTarget ? [selectedTarget.id] : normalizedAppTargets(selectedAppTargets)
+      : undefined;
+    if (selectedTarget) setSelectedAppTargets([selectedTarget.id]);
     if (prompt.trim() && !template) {
       setKind(selectedKind);
       setPendingInterview(true);
       if (!user) setAuth(true);
       return;
     }
-    writeScreen({ template: template || selectedKind });
+    const resolvedTemplate = template || (selectedKind === "app" && nextTargets?.length === 1 ? appTemplate(nextTargets[0]) : undefined);
+    writeScreen({ template: resolvedTemplate || selectedKind, appTargets: selectedKind === "app" ? nextTargets!.join(",") : null });
     setDraft({
       kind: selectedKind,
       name: "",
@@ -457,10 +515,11 @@ export function App() {
       audience: "",
       theme:
         theme ||
-        templates.find((t) => t.id === template)?.themeId ||
+        templates.find((t) => t.id === resolvedTemplate)?.themeId ||
         themes[0]?.id ||
         "",
-      template,
+      template: resolvedTemplate,
+      ...(selectedKind === "app" ? { appTargets: nextTargets } : {}),
     });
   }
   useEffect(() => {
@@ -469,7 +528,11 @@ export function App() {
       if (!id) { setDraft(null); return; }
       const preset = templates.find(t => t.id === id);
       const selectedKind = preset?.kind || kinds.find(k => k.id === id)?.id;
-      if (selectedKind) setDraft(current => current?.template === preset?.id && current?.kind === selectedKind ? current : { kind: selectedKind, name: "", prompt: "", audience: "", theme: preset?.themeId || themes[0].id, template: preset?.id });
+      const selectedTarget = appTargetOptions.find(target => target.template === preset?.id);
+      const urlTargets = normalizedAppTargets(screenParam("appTargets").split(",").filter(Boolean) as AppPlatform[]);
+      const restoredTargets = selectedTarget ? [selectedTarget.id] : urlTargets;
+      if (selectedKind === "app") setSelectedAppTargets(restoredTargets);
+      if (selectedKind) setDraft(current => current?.template === preset?.id && current?.kind === selectedKind ? current : { kind: selectedKind, name: "", prompt: "", audience: "", theme: preset?.themeId || themes[0].id, template: preset?.id, ...(selectedKind === "app" ? { appTargets: restoredTargets } : {}) });
     };
     if (screenParam("template")) restore(); window.addEventListener("popstate", restore);
     return () => window.removeEventListener("popstate", restore);
@@ -477,7 +540,7 @@ export function App() {
   function showProject(next: Project, push = true) {
     setProject(next);
     void trackClient({ event: 'project_open', page: 'editor', projectId: next.id });
-    if (push) writeScreen({ project: next.id, page: null, panel: null, mode: null, inspector: null, settings: null, slide: null, view: null, pane: null, brief: null, dialog: null, template: null, auth: null, library: null });
+    if (push) writeScreen({ project: next.id, page: null, panel: null, mode: null, inspector: null, settings: null, slide: null, view: null, pane: null, brief: null, dialog: null, template: null, appTargets: null, auth: null, library: null });
   }
   useEffect(() => {
     if (!ready || resumeStarted.current) return;
@@ -506,8 +569,10 @@ export function App() {
           kind,
           request.split("\n")[0]!.slice(0, 72),
           theme || undefined,
+          undefined,
+          kind === "app" ? selectedAppTargets : undefined,
         );
-        document.pages = [{ ...document.pages[0]!, nodes: [] }];
+        document.pages = document.pages.map(page => ({ ...page, nodes: [] }));
         if (document.timeline) document.timeline.tracks = [];
         created = (
           await post<{ project: Project }>("/api/projects", {
@@ -533,7 +598,7 @@ export function App() {
         setBusy(false);
       }
     })();
-  }, [pendingInterview, user, prompt, kind, theme]);
+  }, [pendingInterview, user, prompt, kind, selectedAppTargets, theme]);
   async function create(blank = false) {
     if (!draft) return;
     if (!user) {
@@ -550,9 +615,10 @@ export function App() {
           draft.name.trim() || "Untitled design",
           draft.theme,
           draft.template,
+          draft.kind === "app" ? draft.appTargets : undefined,
         );
       if (blank && !draft.document) {
-        document.pages = [{ ...document.pages[0]!, nodes: [] }];
+        document.pages = document.pages.map(page => ({ ...page, nodes: [] }));
         if (document.timeline) document.timeline.tracks = [];
       }
       const { project: created } = await post<{ project: Project }>(
@@ -632,9 +698,11 @@ export function App() {
         prompt: "",
         audience: "",
         theme: result.document.theme.id,
+        ...(result.document.kind === 'app' && result.document.app ? { appTargets: result.document.app.targets } : {}),
         document: result.document,
         importNotice: result.notice,
       });
+      if (result.document.kind === 'app' && result.document.app) setSelectedAppTargets(result.document.app.targets);
       setNotice(result.notice);
     } catch (e) {
       setError(message(e));
@@ -784,6 +852,25 @@ export function App() {
                           ))}
                         </select>
                       </label>
+                      {kind === "app" && (
+                        <div className="app-target-options composer-app-targets" role="group" aria-label="App targets">
+                          <span className="app-target-title"><Smartphone size={16} /> Targets</span>
+                          {appTargetOptions.map((target) => {
+                            const selected = selectedAppTargets.includes(target.id);
+                            return (
+                              <label className={`app-target-option ${selected ? "selected" : ""}`} key={target.id}>
+                                <input
+                                  type="checkbox"
+                                  aria-label={target.name}
+                                  checked={selected}
+                                  onChange={() => setSelectedAppTargets(current => toggledAppTargets(current, target.id))}
+                                />
+                                {target.name}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                     <button
                       className="button primary"
@@ -1191,7 +1278,7 @@ export function App() {
               ? "Import your design"
               : "Give your idea a little direction"
           }
-          onClose={() => { if (!busy) { setDraft(null); writeScreen({ template: null }); } }}
+          onClose={() => { if (!busy) { setDraft(null); writeScreen({ template: null, appTargets: null }); } }}
         >
           <div className="modal-body brief-form">
             <p className="modal-description">
@@ -1202,11 +1289,41 @@ export function App() {
               <p className="import-summary">{draft.importNotice}</p>
             )}
             <div className="brief-kind">
-              <span>{kinds.find((k) => k.id === draft.kind)?.name}</span>
+              <span>
+                {kinds.find((k) => k.id === draft.kind)?.name}
+                {draft.kind === "app" && ` · ${appTargetLabel(draft.appTargets || selectedAppTargets)}`}
+              </span>
               <span>
                 {draft.document ? "Imported document" : "Editable template"}
               </span>
             </div>
+            {draft.kind === "app" && !draft.document && (
+              <Field label="App targets">
+                <div className="app-target-options brief-app-targets" role="group" aria-label="App targets">
+                  {appTargetOptions.map((target) => {
+                    const current = draft.appTargets || selectedAppTargets;
+                    const selected = current.includes(target.id);
+                    return (
+                      <label className={`app-target-option ${selected ? "selected" : ""}`} key={target.id}>
+                        <input
+                          type="checkbox"
+                          aria-label={target.name}
+                          checked={selected}
+                          onChange={() => {
+                            const next = toggledAppTargets(current, target.id);
+                            setSelectedAppTargets(next);
+                            setDraft({ ...draft, appTargets: next, template: next.length === 1 ? appTemplate(next[0]) : undefined });
+                            writeScreen({ template: next.length === 1 ? appTemplate(next[0]) : "app", appTargets: next.join(",") }, true);
+                          }}
+                        />
+                        <target.icon size={16} />
+                        {target.name}
+                      </label>
+                    );
+                  })}
+                </div>
+              </Field>
+            )}
             <Field label="Project name">
               <input
                 autoFocus
@@ -1254,8 +1371,7 @@ export function App() {
             <div className="brief-note">
               <Sparkles size={18} />
               <p>
-                Start with a template, then ask AI to shape it. AI generation
-                uses your own provider key.
+                Start with a template, then ask AI to shape it. App projects store a versioned manifest for every selected target so agents can reason about layout, input, navigation, density, and interaction constraints. AI generation uses your own provider key.
               </p>
             </div>
             {error && (
