@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { Bindings, User } from './types';
-import { id, now, passwordHash } from './security';
+import { id, now, passwordHash, passwordMatches } from './security';
 
 const bootstrapAdminSchema = z.object({
   email: z.string().trim().email().max(254).transform(value => value.toLowerCase()),
@@ -36,8 +36,8 @@ export function isBootstrapAdminEmail(env: Bindings, email: string | null | unde
 }
 
 /**
- * Creates the configured admin account once. Existing accounts are never overwritten,
- * so changing BOOTSTRAP_ADMIN_PASSWORD cannot silently reset a real user's password.
+ * Creates the configured admin account once. An existing account is adopted only when
+ * the configured password already matches it; credentials and profile data are never overwritten.
  */
 export function ensureBootstrapAdmin(env: Bindings): Promise<BootstrapAdminResult | null> {
   const config = rawConfig(env);
@@ -46,10 +46,15 @@ export function ensureBootstrapAdmin(env: Bindings): Promise<BootstrapAdminResul
   const current = pending.get(key);
   if (current) return current;
   const provisioning = (async () => {
-    const existing = await env.DB.prepare('SELECT id,email,name FROM users WHERE email=?')
+    const existing = await env.DB.prepare('SELECT id,email,name,password FROM users WHERE email=?')
       .bind(config.email)
-      .first<User>();
-    if (existing) return { ...existing, created: false };
+      .first<User & { password: string }>();
+    if (existing) {
+      if (!await passwordMatches(config.password, existing.password))
+        throw new Error('Bootstrap admin email already belongs to an account with a different password. Refusing to promote or reset it.');
+      const { password: _password, ...user } = existing;
+      return { ...user, created: false };
+    }
 
     const userId = id();
     const password = await passwordHash(config.password);
@@ -57,11 +62,14 @@ export function ensureBootstrapAdmin(env: Bindings): Promise<BootstrapAdminResul
       .bind(userId, config.email, config.name, password, now())
       .run();
 
-    const user = await env.DB.prepare('SELECT id,email,name FROM users WHERE email=?')
+    const user = await env.DB.prepare('SELECT id,email,name,password FROM users WHERE email=?')
       .bind(config.email)
-      .first<User>();
+      .first<User & { password: string }>();
     if (!user) throw new Error('Bootstrap admin account could not be created.');
-    return { ...user, created: user.id === userId };
+    if (user.id !== userId && !await passwordMatches(config.password, user.password))
+      throw new Error('Bootstrap admin email was claimed concurrently with a different password. Refusing to promote it.');
+    const { password: _password, ...safeUser } = user;
+    return { ...safeUser, created: user.id === userId };
   })().catch(error => {
     pending.delete(key);
     throw error;
