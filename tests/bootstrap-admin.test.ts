@@ -64,7 +64,7 @@ test('bootstrap admin is pre-created, can sign in, and receives operator privile
   }
 });
 
-test('bootstrap admin is idempotent and never resets an existing password', async () => {
+test('bootstrap admin is idempotent, preserves profile data, and refuses a mismatched existing password', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'design-studio-admin-existing-'));
   const path = join(dir, 'studio.db');
   let db = new SqliteDatabase(path);
@@ -83,21 +83,29 @@ test('bootstrap admin is idempotent and never resets an existing password', asyn
     assert.equal(await passwordMatches('Original password 123', originalHash), true);
     db.close();
 
-    // Simulate a process restart with a new database binding and a changed environment secret.
+    // A restart with the same credential adopts the existing account but never rewrites profile data.
     db = new SqliteDatabase(path);
     const restarted: Bindings = {
       ...first,
       DB: db,
-      BOOTSTRAP_ADMIN_PASSWORD: 'Different password 456',
       BOOTSTRAP_ADMIN_NAME: 'Renamed by env',
     };
     const existing = await ensureBootstrapAdmin(restarted);
     assert.equal(existing?.created, false);
-    const afterHash = (await db.prepare('SELECT password,name FROM users WHERE email=?').bind('admin@example.com').first<{ password: string; name: string }>())!;
-    assert.equal(afterHash.password, originalHash);
-    assert.equal(afterHash.name, 'Admin');
-    assert.equal(await passwordMatches('Original password 123', afterHash.password), true);
-    assert.equal(await passwordMatches('Different password 456', afterHash.password), false);
+    const unchanged = (await db.prepare('SELECT password,name FROM users WHERE email=?').bind('admin@example.com').first<{ password: string; name: string }>())!;
+    assert.equal(unchanged.password, originalHash);
+    assert.equal(unchanged.name, 'Admin');
+    db.close();
+
+    // A different bootstrap secret must not silently take over or reset the existing identity.
+    db = new SqliteDatabase(path);
+    const mismatched: Bindings = { ...first, DB: db, BOOTSTRAP_ADMIN_PASSWORD: 'Different password 456' };
+    await assert.rejects(() => ensureBootstrapAdmin(mismatched), /different password/);
+    const afterFailure = (await db.prepare('SELECT password,name FROM users WHERE email=?').bind('admin@example.com').first<{ password: string; name: string }>())!;
+    assert.equal(afterFailure.password, originalHash);
+    assert.equal(afterFailure.name, 'Admin');
+    assert.equal(await passwordMatches('Original password 123', afterFailure.password), true);
+    assert.equal(await passwordMatches('Different password 456', afterFailure.password), false);
   } finally {
     db.close();
     await rm(dir, { recursive: true, force: true });
