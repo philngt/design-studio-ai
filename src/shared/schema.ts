@@ -40,14 +40,14 @@ export const nodeSchema = z.object({
   text: z.string().max(50000).optional(), src: z.string().max(2000000).refine(isSafeUrl, 'Only HTTPS, owned assets, or raster image data URLs are allowed').optional(),
   style: primitiveStyle.optional(), data: z.record(z.string().max(80), z.unknown()).optional()
 });
-export const pageSchema = z.object({ id, name: z.string().max(200), width: dimension.min(1), height: dimension.min(1), background: z.string().max(80), layout: layoutSchema.optional(), notes: z.string().max(20000).optional(), scene: sceneSchema.optional(), nodes: z.array(nodeSchema).max(2000) });
+export const pageSchema = z.object({ id, name: z.string().max(200), width: dimension.min(1), height: dimension.min(1), background: z.string().max(80), appTarget: z.enum(appTargetIds).optional(), layout: layoutSchema.optional(), notes: z.string().max(20000).optional(), scene: sceneSchema.optional(), nodes: z.array(nodeSchema).max(2000) });
 const documentBaseSchema = z.object({
   schemaVersion: z.literal(1), characters: z.array(characterSchema).max(32).optional(), id, name: z.string().min(1).max(200), kind: z.enum(kinds), theme: themeSchema,
   pages: z.array(pageSchema).min(1).max(200),
   assets: z.array(z.object({ id, name: z.string().max(300), type: z.string().max(80), mimeType: z.string().max(100), url: z.string().max(2000000).refine(isSafeUrl), size: finite.min(0).optional() })).max(2000),
   designSystem: z.object({ id, version: z.number().int().positive(), name: z.string().max(200) }).optional(),
   app: appManifestSchema.optional(),
-  presentation: z.object({ interval: finite.min(1).max(600), loop: z.boolean() }).optional(),
+  presentation: z.object({ interval: finite.min(1).max(600), loop: z.boolean().optional() }).optional(),
   timeline: timelineSchema.optional(),
   metadata: z.object({ createdAt: z.iso.datetime(), updatedAt: z.iso.datetime() })
 });
@@ -60,6 +60,8 @@ export const documentSchema = z.discriminatedUnion('schemaVersion', [legacyDocum
   const unique = (value: string) => { if (allIds.has(value)) ctx.addIssue({ code: 'custom', message: `Duplicate ID: ${value}` }); allIds.add(value); };
   if (doc.kind === 'app' && !doc.app) ctx.addIssue({ code: 'custom', message: 'App documents require at least one target manifest.' });
   if (doc.kind !== 'app' && doc.app) ctx.addIssue({ code: 'custom', message: 'App target metadata is only valid for app documents.' });
+  if (doc.kind !== 'app' && doc.pages.some(page => page.appTarget)) ctx.addIssue({ code: 'custom', message: 'App page targets are only valid for app documents.' });
+  if (doc.kind === 'app' && doc.app) for (const page of doc.pages) if (page.appTarget && !doc.app.targets.includes(page.appTarget)) ctx.addIssue({ code: 'custom', message: `Page target ${page.appTarget} is not selected by this app.` });
   const characters = new Map((doc.characters ?? []).map(c => [c.id, c]));
   if (doc.schemaVersion === 1 && (doc.characters?.length || doc.pages.some(p => p.nodes.some(n => n.character || n.type === 'character')))) ctx.addIssue({ code:'custom',message:'Characters require document schemaVersion 2' });
   let characterKeys=0, characterVertices=0;
