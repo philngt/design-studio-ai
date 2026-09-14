@@ -1,4 +1,5 @@
 import { applyTemplatePreset, extraTemplates, systemThemes } from './catalog-presets';
+import { buildAppManifest, normalizeAppTargets } from './app-target-manifests';
 import { uid, type AppPlatform, type DesignDocument, type DesignNode, type DesignPage, type ProjectKind, type Theme } from './schema';
 import { structuredPage } from './structured-templates';
 
@@ -44,12 +45,38 @@ export function createBlock(id: string, offset = 0): DesignNode[] {
   return structuredClone(block.nodes).map(n => ({ ...n, id: uid(), x: n.x + offset, y: n.y + offset }));
 }
 
-export function createDocument(kind: ProjectKind = 'web', name = 'Untitled design', themeId?: string, templateId?: string): DesignDocument {
+export function createDocument(kind: ProjectKind = 'web', name = 'Untitled design', themeId?: string, templateId?: string, requestedAppTargets?: readonly AppPlatform[]): DesignDocument {
   const template = templates.find(t => t.id === templateId) ?? templates.find(t => t.kind === kind);
   const theme = structuredClone(themes.find(t => t.id === (themeId ?? template?.themeId)) ?? themes[0]);
   const now = new Date().toISOString();
   const page = (label: string, width = 1440, height = 900, nodes: DesignNode[] = []): DesignPage => ({ id: uid(), name: label, width, height, background: '$background', nodes });
-  const appPlatform: AppPlatform = templateId === 'app-tablet' ? 'tablet' : templateId === 'app-desktop' ? 'desktop' : 'mobile';
+  const templateTarget: AppPlatform | undefined = templateId === 'app-tablet' ? 'tablet' : templateId === 'app-desktop' ? 'desktop' : templateId === 'app-mobile' ? 'mobile' : undefined;
+  const appTargets = kind === 'app' ? normalizeAppTargets(requestedAppTargets?.length ? requestedAppTargets : templateTarget ? [templateTarget] : undefined) : [];
+  const appPage = (target: AppPlatform): DesignPage => {
+    if (target === 'mobile') return page('Mobile app', 393, 852, [
+      text('9:41', 28, 18, 120, 24, 14), text('Good morning,\nAlex.', 28, 90, 320, 100, 40, true),
+      text('YOUR SPACE, AT A GLANCE', 28, 224, 330, 28, 12), shape('Summary', 24, 270, 345, 172),
+      text('Make room for your\nnext great idea.', 46, 305, 296, 90, 28),
+      ...[0, 1, 2].flatMap(i => [shape('List row', 24, 474 + i * 82, 345, 66), text(['Explore your projects', 'Collect inspiration', 'Build something new'][i], 46, 493 + i * 82, 300, 30, 16)]),
+      shape('Tab bar', 0, 770, 393, 82, '$text', 0), { ...text('Home        Projects        Library', 30, 800, 335, 28, 13), style: { fontSize: 13, fill: '$background' } }
+    ]);
+    if (target === 'tablet') return page('Tablet app', 1024, 1366, [
+      shape('Sidebar', 0, 0, 280, 1366, '$surface', 0), text('MY SPACE', 36, 48, 190, 32, 15),
+      text('Home\n\nProjects\n\nLibrary\n\nShared', 36, 130, 190, 280, 20),
+      text('Good morning, Alex.', 336, 74, 610, 70, 46, true), text('A wider canvas for work that needs context.', 338, 154, 600, 54, 21),
+      shape('Hero', 332, 246, 628, 260), text('Your next idea,\nwith room to grow.', 372, 292, 510, 120, 38, true),
+      text('RECENT PROJECTS', 336, 580, 540, 30, 14),
+      ...[0, 1, 2].flatMap(i => [shape('Project card', 336 + (i % 2) * 310, 640 + Math.floor(i / 2) * 230, 286, 196), text(['Product concept', 'Research notes', 'Launch plan'][i], 362 + (i % 2) * 310, 674 + Math.floor(i / 2) * 230, 232, 54, 22, true), text(['Updated today', 'Updated yesterday', 'Updated Friday'][i], 362 + (i % 2) * 310, 760 + Math.floor(i / 2) * 230, 220, 30, 15)])
+    ]);
+    return page('Desktop app', 1440, 900, [
+      shape('Sidebar', 0, 0, 260, 900, '$surface', 0), text('DESIGN DESK', 30, 30, 190, 34, 15),
+      text('Home\n\nProjects\n\nLibrary\n\nActivity', 30, 104, 190, 250, 18),
+      shape('Toolbar', 260, 0, 1180, 72, '$background', 0), text('Workspace', 300, 23, 320, 36, 20, true), text('Search     Share     •••', 1110, 23, 270, 32, 15),
+      text('Good morning, Alex.', 314, 130, 720, 70, 46, true), text('Everything important stays visible while you work.', 316, 202, 690, 42, 20),
+      shape('Primary panel', 312, 286, 710, 500), text('Current project', 348, 324, 610, 34, 15), text('A focused desktop\nworkspace.', 348, 384, 610, 118, 42, true),
+      shape('Inspector', 1060, 286, 330, 500), text('DETAILS', 1094, 324, 250, 30, 14), text('Status\nIn progress\n\nOwner\nAlex\n\nUpdated\nJust now', 1094, 382, 240, 250, 18)
+    ]);
+  };
   let pages: DesignPage[];
   if (kind === 'web') {
     pages = [page('Landing page', 1440, 1040, [
@@ -66,33 +93,7 @@ export function createDocument(kind: ProjectKind = 'web', name = 'Untitled desig
       text('Start with a better question.', 76, 897, 390, 70, 30, true), text('Find your own point of view.', 520, 897, 390, 70, 30, true), text('Make every moment matter.', 965, 897, 390, 70, 30, true)
     ])];
   } else if (kind === 'app') {
-    if (appPlatform === 'mobile') {
-      pages = [page('Mobile app', 393, 852, [
-        text('9:41', 28, 18, 120, 24, 14), text('Good morning,\nAlex.', 28, 90, 320, 100, 40, true),
-        text('YOUR SPACE, AT A GLANCE', 28, 224, 330, 28, 12), shape('Summary', 24, 270, 345, 172),
-        text('Make room for your\nnext great idea.', 46, 305, 296, 90, 28),
-        ...[0, 1, 2].flatMap(i => [shape('List row', 24, 474 + i * 82, 345, 66), text(['Explore your projects', 'Collect inspiration', 'Build something new'][i], 46, 493 + i * 82, 300, 30, 16)]),
-        shape('Tab bar', 0, 770, 393, 82, '$text', 0), { ...text('Home        Projects        Library', 30, 800, 335, 28, 13), style: { fontSize: 13, fill: '$background' } }
-      ])];
-    } else if (appPlatform === 'tablet') {
-      pages = [page('Tablet app', 1024, 1366, [
-        shape('Sidebar', 0, 0, 280, 1366, '$surface', 0), text('MY SPACE', 36, 48, 190, 32, 15),
-        text('Home\n\nProjects\n\nLibrary\n\nShared', 36, 130, 190, 280, 20),
-        text('Good morning, Alex.', 336, 74, 610, 70, 46, true), text('A wider canvas for work that needs context.', 338, 154, 600, 54, 21),
-        shape('Hero', 332, 246, 628, 260), text('Your next idea,\nwith room to grow.', 372, 292, 510, 120, 38, true),
-        text('RECENT PROJECTS', 336, 580, 540, 30, 14),
-        ...[0, 1, 2].flatMap(i => [shape('Project card', 336 + (i % 2) * 310, 640 + Math.floor(i / 2) * 230, 286, 196), text(['Product concept', 'Research notes', 'Launch plan'][i], 362 + (i % 2) * 310, 674 + Math.floor(i / 2) * 230, 232, 54, 22, true), text(['Updated today', 'Updated yesterday', 'Updated Friday'][i], 362 + (i % 2) * 310, 760 + Math.floor(i / 2) * 230, 220, 30, 15)])
-      ])];
-    } else {
-      pages = [page('Desktop app', 1440, 900, [
-        shape('Sidebar', 0, 0, 260, 900, '$surface', 0), text('DESIGN DESK', 30, 30, 190, 34, 15),
-        text('Home\n\nProjects\n\nLibrary\n\nActivity', 30, 104, 190, 250, 18),
-        shape('Toolbar', 260, 0, 1180, 72, '$background', 0), text('Workspace', 300, 23, 320, 36, 20, true), text('Search     Share     •••', 1110, 23, 270, 32, 15),
-        text('Good morning, Alex.', 314, 130, 720, 70, 46, true), text('Everything important stays visible while you work.', 316, 202, 690, 42, 20),
-        shape('Primary panel', 312, 286, 710, 500), text('Current project', 348, 324, 610, 34, 15), text('A focused desktop\nworkspace.', 348, 384, 610, 118, 42, true),
-        shape('Inspector', 1060, 286, 330, 500), text('DETAILS', 1094, 324, 250, 30, 14), text('Status\nIn progress\n\nOwner\nAlex\n\nUpdated\nJust now', 1094, 382, 240, 250, 18)
-      ])];
-    }
+    pages = appTargets.map(appPage);
   } else if (kind === 'slides') {
     pages = [page('The big idea', 1280, 720, [text('YOUR NEXT CHAPTER / 2026', 72, 54, 720, 40, 17), text('Good ideas\ndeserve great design.', 72, 194, 980, 260, 88, true), text('A presentation for what comes next.', 76, 547, 900, 60, 25), shape('Accent line', 76, 635, 1120, 3, '$accent', 0)]),
       page('A clear perspective', 1280, 720, [text('01 / THE OPPORTUNITY', 72, 54, 900, 40, 17), text('Make the complex\nfeel simple.', 72, 175, 700, 210, 74, true), text('Start with the people. Understand the problem.\nCreate something that makes their day better.', 76, 490, 790, 100, 25), shape('Idea', 950, 200, 220, 300, '$accent', 110)]),
@@ -111,7 +112,7 @@ export function createDocument(kind: ProjectKind = 'web', name = 'Untitled desig
   }
   for (const page of pages) for (const node of page.nodes) node.id = uid();
   if (kind === 'web' || kind === 'wireframe') pages = [structuredPage(kind === 'wireframe')];
-  const doc: DesignDocument = { schemaVersion: 1, id: uid(), name, kind, theme, pages, assets: [], ...(kind === 'app' ? { app: { platform: appPlatform } } : {}), metadata: { createdAt: now, updatedAt: now } };
+  const doc: DesignDocument = { schemaVersion: 1, id: uid(), name, kind, theme, pages, assets: [], ...(kind === 'app' ? { app: buildAppManifest(appTargets) } : {}), metadata: { createdAt: now, updatedAt: now } };
   if (kind === 'video') doc.timeline = { duration: 6, fps: 30, tracks: [{ id: uid(), nodeId: pages[0].nodes[1].id, keyframes: [{ time: 0, values: { opacity: 0, y: 275 } }, { time: 1.5, values: { opacity: 1, y: 215 } }, { time: 5, values: { opacity: 1, y: 215 } }, { time: 6, values: { opacity: 0, y: 190 } }] }, { id: uid(), nodeId: pages[0].nodes[0].id, keyframes: [{ time: 0, values: { x: 1040, rotation: 0 } }, { time: 6, values: { x: 940, rotation: 180 } }] }] };
   if (templateId === 'creative-board') { const boardId = uid(); return { ...doc, schemaVersion: 2, boards: [{ id: boardId, name, elements: [], background: '#ffffff' }], paintings: [], pages: [page('Board', 1440, 960, [{ id: uid(), type: 'board', name, x: 0, y: 0, width: 1440, height: 960, boardId, crop: { x: 0, y: 0, width: 1440, height: 960 } }])] }; }
   return applyTemplatePreset(doc, templateId);
