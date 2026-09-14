@@ -47,12 +47,12 @@ npx playwright install chromium
 npm run build
 ```
 
-Set a stable random 32-byte base64 `ENCRYPTION_KEY` in the server's process environment, and set `APP_URL=http://localhost:8787`:
+Create a local `.env` from the template, generate a stable random 32-byte base64 encryption key, then start the server. `npm start` loads `.env` through Node's native `--env-file-if-exists` support; environment variables already supplied by the process remain authoritative.
 
 ```sh
+cp .env.example .env
 node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
-export ENCRYPTION_KEY='<generated-key>'
-export APP_URL='http://localhost:8787'
+# Put the generated ENCRYPTION_KEY and your APP_URL in .env.
 npm start
 ```
 
