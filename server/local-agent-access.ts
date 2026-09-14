@@ -47,6 +47,7 @@ export async function localAgentProviderMetadata(c: Context<Env>) {
       // picker. Text generation is intercepted before any HTTP provider code runs.
       protocol: 'anthropic' as const,
       authMethod: 'none' as const,
+      authHeader: undefined,
       configured: true,
       apiKey: '',
       localAgent: { id: status.id, version: status.version ?? null },
