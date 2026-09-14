@@ -18,7 +18,7 @@ import { inspectMotion, motionInspectionSchema } from '../src/shared/motion-insp
 import { updateEvent } from './observability-store';
 import { Hono } from "hono";
 import { z } from "zod";
-import { documentSchema, type DesignDocument } from "../src/shared/schema";
+import { documentSchema, kinds, type DesignDocument } from "../src/shared/schema";
 import { createDocument } from "../src/shared/catalog";
 import { renderHtml } from "../src/shared/render";
 import type { Env } from "./types";
@@ -277,9 +277,7 @@ projectRoutes.post("/", async (c) => {
     .object({
       name: z.string().trim().min(1).max(200),
       description: z.string().max(5000).default(""),
-      kind: z
-        .enum(["web", "slides", "report", "wireframe", "3d", "video"])
-        .default("web"),
+      kind: z.enum(kinds).default("web"),
       document: documentSchema.optional(),
       themeId: z.string().max(120).optional(),
       templateId: z.string().max(120).optional(),
