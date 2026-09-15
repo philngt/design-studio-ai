@@ -30,8 +30,12 @@ async function currentBrief(c: Context<Env>, projectId: string): Promise<DesignB
 }
 
 function targetSet(document: DesignDocument): StrategyTarget[] {
-  if (document.kind === 'app') return document.app.targets;
-  return ['web'];
+  if (document.kind === 'web') return ['web'];
+  if (document.kind === 'app') {
+    if (!document.app) fail(400, 'app_manifest_required', 'App projects require target manifests before design strategy.');
+    return document.app.targets;
+  }
+  fail(400, 'unsupported_strategy_kind', 'Design Strategy Contracts currently apply to Website and App projects.');
 }
 
 function validateTargets(body: DesignStrategyBody, document: DesignDocument) {
@@ -98,8 +102,9 @@ async function persist(
 }
 
 function strategyContext(document: DesignDocument) {
-  if (document.kind !== 'app') return { targets: ['web'], manifests: [] };
-  return { targets: document.app.targets, manifests: document.app.manifests };
+  const targets = targetSet(document);
+  if (document.kind === 'app') return { targets, manifests: document.app!.manifests };
+  return { targets, manifests: [] };
 }
 
 const strategySystem = `You are the design-strategy stage between an approved product brief and UI execution. Do not design screens or output code. Return only the requested JSON strategy object.
