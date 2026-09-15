@@ -58,6 +58,7 @@ import { documentSchema } from '../src/shared/schema';
 import { operationsSchema } from '../src/shared/operations';
 import { themes, templates, blocks } from '../src/shared/catalog';
 import { briefRoutes } from './briefs';
+import { designStrategyRoutes } from './design-strategies';
 import { interviewSchema, scopeSchema } from '../src/shared/brief';
 import { inspectDesign } from '../src/shared/design-checks';
 import { projectRow } from './projects';
@@ -290,6 +291,7 @@ app.route('/api/projects', thumbnailRoutes);
 app.route('/api/projects', visualInspectionRoutes);
 app.route('/api/projects', conversationRoutes);
 app.route('/api/projects', briefRoutes);
+app.route('/api/projects', designStrategyRoutes);
 app.get('/api/projects/:id/checks', async c => {
   const project = await projectRow(c, c.req.param('id'));
   return c.json({projectId:project.id, revision:project.revision, ...inspectDesign(JSON.parse(project.document))});

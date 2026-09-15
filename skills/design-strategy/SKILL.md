@@ -43,6 +43,25 @@ Before implementation:
 
 If the user asks only for visual exploration, the contract may be lightweight, but still state the user job, platform, hierarchy, and evaluation criteria.
 
+## Design Studio first-class contract
+
+Inside Design Studio AI, the strategy is persisted independently from the canvas and design system. Do not keep the only copy in chat text.
+
+Use the Studio tools in this order:
+
+1. `get_project` to read the current document and App target manifests.
+2. `get_design_brief` and require an explicitly approved current scope.
+3. `get_design_strategy` to inspect the persisted contract and its `sourceBriefRevision`.
+4. If strategy is missing or stale, use `generate_design_strategy` with an owner-configured provider, or prepare the contract yourself and call `update_design_strategy`.
+5. Present the alternatives, selected direction, trade-offs, platform adaptation, assumptions, and success criteria to the human.
+6. Call `approve_design_strategy` only after the human explicitly accepts the strategy. Never infer approval from silence, an existing design, or a previous brief approval.
+7. Only after approval should an execution agent edit the document.
+8. After execution, inspect the runtime result and compare it against the contract's success criteria and validation plan.
+
+Every strategy edit returns the contract to `draft`. A contract tied to an older brief revision is stale and must not be treated as implementation authority.
+
+For App projects, platform adaptation must cover exactly the selected `document.app.targets`. Read the matching `document.app.manifests`; do not infer Tablet/Desktop behavior from canvas size alone.
+
 ## Read the references
 
 Read [core mechanisms and principles](references/core.md) for every strategy task. Then read [platform adapters](references/platforms.md) for the target environment. Use [decision patterns](references/decision-patterns.md) when selecting navigation, layout, interaction, disclosure, or density. Produce the output using [the strategy contract](references/strategy-contract.md), and close the loop with [evaluation](references/evaluation.md).
@@ -68,7 +87,7 @@ Distinguish fact, measurement, mechanism, assumption, principle, strategy, and i
 
 Do not hand off vague instructions such as `make it premium`, `improve UX`, or `modernize the UI`. Hand off an explicit contract containing user job, primary outcome, hierarchy, navigation, interaction model, disclosure, density, platform adaptation, constraints, rejected alternatives, success criteria, and open assumptions.
 
-Implementation may choose code structure, but it must not silently change strategy. If technical constraints force a strategic change, surface the trade-off and revise the contract first.
+Implementation may choose code structure, but it must not silently change strategy. If technical constraints force a strategic change, surface the trade-off and revise the persisted contract first.
 
 ## Completion
 
