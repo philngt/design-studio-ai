@@ -7,7 +7,7 @@ const list = z.array(text).max(24);
 export const strategyTargetSchema = z.enum(['web', 'mobile', 'tablet', 'desktop']);
 export type StrategyTarget = z.infer<typeof strategyTargetSchema>;
 
-export const designStrategyBodySchema = z.object({
+const designStrategyBodyBase = z.object({
   userJob: z.object({
     primary: text,
     secondary: list,
@@ -63,7 +63,9 @@ export const designStrategyBodySchema = z.object({
   }).strict(),
   successCriteria: z.array(text).min(1).max(16),
   validationPlan: z.array(text).min(1).max(16),
-}).strict().superRefine((value, ctx) => {
+}).strict();
+
+function refineStrategyBody(value: z.infer<typeof designStrategyBodyBase>, ctx: z.RefinementCtx) {
   const ids = new Set(value.alternatives.map(item => item.id));
   if (ids.size !== value.alternatives.length)
     ctx.addIssue({ code: 'custom', path: ['alternatives'], message: 'Alternative ids must be unique.' });
@@ -72,9 +74,11 @@ export const designStrategyBodySchema = z.object({
   const targets = new Set(value.platformAdaptation.map(item => item.target));
   if (targets.size !== value.platformAdaptation.length)
     ctx.addIssue({ code: 'custom', path: ['platformAdaptation'], message: 'Platform adaptations must have unique targets.' });
-});
+}
 
-export const designStrategySchema = designStrategyBodySchema.extend({
+export const designStrategyBodySchema = designStrategyBodyBase.superRefine(refineStrategyBody);
+
+export const designStrategySchema = designStrategyBodyBase.extend({
   schemaVersion: z.literal('design-strategy.v1'),
   projectId: z.string().min(1).max(128),
   revision: z.number().int().min(1),
@@ -82,7 +86,7 @@ export const designStrategySchema = designStrategyBodySchema.extend({
   status: z.enum(['draft', 'approved']),
   approvedAt: z.string().nullable(),
   updatedAt: z.string(),
-}).strict();
+}).strict().superRefine(refineStrategyBody);
 
 export type DesignStrategyBody = z.infer<typeof designStrategyBodySchema>;
 export type DesignStrategy = z.infer<typeof designStrategySchema>;
