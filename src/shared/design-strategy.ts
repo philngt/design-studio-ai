@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { textProviderSchema } from './providers';
 
 const text = z.string().trim().min(1).max(1000);
 const shortText = z.string().trim().min(1).max(240);
@@ -94,7 +95,7 @@ export type DesignStrategy = z.infer<typeof designStrategySchema>;
 export const designStrategyGenerateSchema = z.object({
   expectedRevision: z.number().int().min(0),
   expectedBriefRevision: z.number().int().min(1),
-  provider: z.string().min(1).max(80),
+  provider: textProviderSchema,
   model: z.string().trim().min(1).max(200).optional(),
 }).strict();
 
