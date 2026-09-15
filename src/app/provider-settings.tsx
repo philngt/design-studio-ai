@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Check, ChevronRight, Plus } from 'lucide-react';
 import { builtInProviders, isCustomProvider, providerDefaults, type AuthMethod, type ProviderProtocol } from '../shared/providers';
+import { isLocalAgentProviderId } from '../shared/local-agents';
 import { api, put, message, type Provider } from './api';
 import { Busy, Field } from './ui';
 import { ModelPicker } from './model-picker';
@@ -14,11 +15,11 @@ export function ProviderSettings({ providers, onChanged }: { providers: Provider
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [success, setSuccess] = useState('');
   const [refresh, setRefresh] = useState(0);
   const creating = selected === 'new-custom', custom = creating || isCustomProvider(selected);
-  const saved = providers.find(p => p.provider === selected);
+  const saved = providers.find(p => p.provider === selected && !isLocalAgentProviderId(p.provider));
   const current = providerDefaults(selected);
-  const options = [...builtInProviders, ...providers.filter(p => isCustomProvider(p.provider)).map(p => ({ id: p.provider, name: p.name || p.provider, detail: 'Custom API connection' }))];
+  const options = [...builtInProviders, ...providers.filter(p => isCustomProvider(p.provider) && !isLocalAgentProviderId(p.provider)).map(p => ({ id: p.provider, name: p.name || p.provider, detail: 'Custom API connection' }))];
   function select(id: string) {
-    const connection = providers.find(p => p.provider === id);
+    const connection = providers.find(p => p.provider === id && !isLocalAgentProviderId(p.provider));
     setSelected(id); setKey(''); setModel(connection?.model ?? ''); setBaseUrl(connection?.baseUrl ?? '');
     setName(connection?.name ?? ''); setSlug(''); setProtocol(connection?.protocol ?? 'openai');
     setAuthMethod(connection?.authMethod ?? 'bearer'); setAuthHeader(connection?.authHeader ?? 'X-API-Key');
@@ -30,6 +31,7 @@ export function ProviderSettings({ providers, onChanged }: { providers: Provider
   }
   async function save() {
     const id = creating ? `custom-${slug}` : selected;
+    if (isLocalAgentProviderId(id)) throw new Error('This provider ID is reserved for a host-local agent runtime.');
     if (creating && providers.some(p => p.provider === id)) throw new Error('This provider ID already exists. Select its connection to edit it, or choose another ID.');
     await put(`/api/providers/${encodeURIComponent(id)}`, {
       ...(key && (!custom || authMethod !== 'none') ? { apiKey: key } : {}), ...(model.trim() ? { model: model.trim() } : {}),
@@ -44,7 +46,7 @@ export function ProviderSettings({ providers, onChanged }: { providers: Provider
     <div className="provider-list" onKeyDown={event => navigateButtonGroup(event, ':scope > button', 'vertical')}>
       {options.map(item => <button key={item.id} disabled={busy} className={selected === item.id ? 'selected' : ''} aria-pressed={selected === item.id} onClick={() => select(item.id)}>
         <span className="provider-letter">{item.name[0]}</span><span><strong>{item.name}</strong><small>{item.detail}</small></span>
-        {providers.some(p => p.provider === item.id && p.configured) ? <span className="configured"><Check size={14} /> Connected</span> : <ChevronRight size={16} />}
+        {providers.some(p => p.provider === item.id && p.configured && !isLocalAgentProviderId(p.provider)) ? <span className="configured"><Check size={14} /> Connected</span> : <ChevronRight size={16} />}
       </button>)}
       <button disabled={busy} aria-pressed={creating} onClick={() => select('new-custom')}><Plus size={18} /><span><strong>Add custom provider</strong><small>Choose your endpoint and authentication</small></span></button>
     </div>

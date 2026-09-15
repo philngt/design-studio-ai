@@ -1,4 +1,5 @@
 import type puppeteer from '@cloudflare/puppeteer';
+import type { LocalAgentRunner } from '../src/shared/local-agents';
 export interface Statement {
   bind(...values: unknown[]): Statement;
   first<T = Record<string, unknown>>(): Promise<T | null>;
@@ -31,6 +32,9 @@ export interface Bindings {
   DB: Database;
   ASSETS_BUCKET: Bucket;
   BROWSER?: Parameters<typeof puppeteer.launch>[0]; EXPORT_BROWSER?: () => Promise<import("./exports").ExportBrowser>;
+  AGENT_RUNNER?: LocalAgentRunner;
+  AGENT_BRIDGE_ENABLED?: string;
+  AGENT_BRIDGE_USER_IDS?: string;
   ASSETS?: { fetch(request: Request): Promise<Response> };
   ENCRYPTION_KEY?: string;
   APP_URL?: string;
