@@ -41,6 +41,20 @@ function validateTargets(body: DesignStrategyBody, document: DesignDocument) {
     fail(400, 'strategy_targets_mismatch', `Platform adaptation must cover exactly: ${expected.join(', ')}.`);
 }
 
+function strategyBody(strategy: DesignStrategy): DesignStrategyBody {
+  const {
+    schemaVersion: _schemaVersion,
+    projectId: _projectId,
+    revision: _revision,
+    sourceBriefRevision: _sourceBriefRevision,
+    status: _status,
+    approvedAt: _approvedAt,
+    updatedAt: _updatedAt,
+    ...body
+  } = strategy;
+  return designStrategyBodySchema.parse(body);
+}
+
 export async function readDesignStrategy(c: Context<Env>, projectId: string): Promise<DesignStrategy | null> {
   await projectRow(c, projectId);
   const row = await c.env.DB.prepare('SELECT strategy FROM design_strategies WHERE project_id=? AND user_id=?')
@@ -168,7 +182,7 @@ designStrategyRoutes.post('/:id/strategy/approve', async c => {
   if (previous.sourceBriefRevision !== brief.revision)
     fail(409, 'strategy_stale', 'This strategy was created from an older brief. Regenerate it before approval.');
   const document = documentSchema.parse(JSON.parse(project.document));
-  const body = designStrategyBodySchema.parse(previous);
+  const body = strategyBody(previous);
   validateTargets(body, document);
   return c.json({ strategy: await persist(c, project.id, body, brief.revision, input.expectedRevision, 'approved', now()) });
 });
