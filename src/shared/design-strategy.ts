@@ -66,18 +66,24 @@ const designStrategyBodyBase = z.object({
   validationPlan: z.array(text).min(1).max(16),
 }).strict();
 
-function refineStrategyBody(value: z.infer<typeof designStrategyBodyBase>, ctx: z.RefinementCtx) {
+type StrategyBodyBase = z.infer<typeof designStrategyBodyBase>;
+type StrategyIssue = { path: (string | number)[]; message: string };
+function strategyIssues(value: StrategyBodyBase): StrategyIssue[] {
+  const issues: StrategyIssue[] = [];
   const ids = new Set(value.alternatives.map(item => item.id));
   if (ids.size !== value.alternatives.length)
-    ctx.addIssue({ code: 'custom', path: ['alternatives'], message: 'Alternative ids must be unique.' });
+    issues.push({ path: ['alternatives'], message: 'Alternative ids must be unique.' });
   if (!ids.has(value.decision.selectedAlternativeId))
-    ctx.addIssue({ code: 'custom', path: ['decision', 'selectedAlternativeId'], message: 'Decision must select one of the declared alternatives.' });
+    issues.push({ path: ['decision', 'selectedAlternativeId'], message: 'Decision must select one of the declared alternatives.' });
   const targets = new Set(value.platformAdaptation.map(item => item.target));
   if (targets.size !== value.platformAdaptation.length)
-    ctx.addIssue({ code: 'custom', path: ['platformAdaptation'], message: 'Platform adaptations must have unique targets.' });
+    issues.push({ path: ['platformAdaptation'], message: 'Platform adaptations must have unique targets.' });
+  return issues;
 }
 
-export const designStrategyBodySchema = designStrategyBodyBase.superRefine(refineStrategyBody);
+export const designStrategyBodySchema = designStrategyBodyBase.superRefine((value, ctx) => {
+  for (const issue of strategyIssues(value)) ctx.addIssue({ code: 'custom', ...issue });
+});
 
 export const designStrategySchema = designStrategyBodyBase.extend({
   schemaVersion: z.literal('design-strategy.v1'),
@@ -87,7 +93,9 @@ export const designStrategySchema = designStrategyBodyBase.extend({
   status: z.enum(['draft', 'approved']),
   approvedAt: z.string().nullable(),
   updatedAt: z.string(),
-}).strict().superRefine(refineStrategyBody);
+}).strict().superRefine((value, ctx) => {
+  for (const issue of strategyIssues(value)) ctx.addIssue({ code: 'custom', ...issue });
+});
 
 export type DesignStrategyBody = z.infer<typeof designStrategyBodySchema>;
 export type DesignStrategy = z.infer<typeof designStrategySchema>;
