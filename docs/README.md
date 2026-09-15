@@ -5,6 +5,7 @@ Start here when maintaining Design Studio AI. The [root README](../README.md) in
 | Decision | Guide |
 | --- | --- |
 | Understand product intent, constraints, and requested outcomes | [Product brief](product-brief.md) |
+| Turn approved product context into explicit hierarchy, interaction, platform, and trade-off decisions before implementation | [Design strategy](design-strategy.md) |
 | Locate shared contracts, runtime boundaries, and their executable owners | [Architecture](architecture.md) |
 | Maintain creative boards, paint persistence and public-source boundaries | [Creative tools](creative-tools.md) |
 | Rig and animate native 2D characters | [Character motion](character-motion.md) |
@@ -14,7 +15,7 @@ Start here when maintaining Design Studio AI. The [root README](../README.md) in
 | Understand provider setup and source-media constraints | [Providers](providers.md) |
 | Maintain the public documentation portal, beginner guide, and discovery output | [Web documentation](web-documentation.md) |
 
-[Agent access](agents.md) documents using the product. The installable [design-studio-ai skill](../skills/design-studio-ai/SKILL.md) guides agents creating designs in it. Repository coding-agent behavior belongs in [AGENTS.md](../AGENTS.md).
+[Agent access](agents.md) documents using the product. The installable [design-studio-ai skill](../skills/design-studio-ai/SKILL.md) guides agents creating designs in it, while [design-strategy](../skills/design-strategy/SKILL.md) owns the reasoning and approval gate before substantial UI execution. Repository coding-agent behavior belongs in [AGENTS.md](../AGENTS.md).
 
 Use the executable owners linked from each guide for current schemas, routes, commands, and configuration. These guides provide context and navigation; the product brief records requested scope rather than proof of completion.
 
