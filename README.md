@@ -16,7 +16,7 @@ This repository tracks and extends the upstream Design Studio AI project.
 - CLI and agents should set `DESIGN_STUDIO_URL` to the intended deployment.
 - Upstream copyright and MIT license attribution are preserved.
 
-![Design Studio workspace with a prompt composer and starter templates for websites, presentations, documents, wireframes, 3D scenes, and motion](docs/assets/workspace.webp)
+![Current Design Studio workspace with prompt composer, Activity navigation, and starter templates including mobile, tablet, and desktop apps](docs/assets/workspace-current.png)
 
 ## Capabilities
 
@@ -61,6 +61,17 @@ SQLite and assets persist under `DATA_DIR` (default `data`). See [deployment ins
 ## Agent access
 
 The self-hosted editor also supports opt-in Claude Code, Codex, Copilot, OpenCode and Pi sessions. They edit drafts for explicit human Apply/Discard, using CLI credentials for one operator-designated Studio account. See [coding-agent setup](docs/coding-agents.md); no Paseo service is required. This is available on Node/Docker, not Cloudflare Workers.
+
+![Desktop editor with Coding agent mode selected, Codex provider and model controls, a saved landing-page canvas, and an unsent design request](docs/assets/coding-agents-desktop.png)
+
+The coding-agent interface sits beside the saved canvas. These screenshots show a built-in template and an unsent request, not a generated result; running an agent requires server-side CLI authentication.
+
+<details>
+<summary>Coding-agent interface on mobile</summary>
+
+<img src="docs/assets/coding-agents-mobile.png" width="390" alt="Mobile Chat and layers pane with Coding agent mode, session, provider and model controls, draft-only guidance, and Send to agent">
+
+</details>
 
 Create an API token in Settings and inject `DESIGN_STUDIO_API_KEY` into the agent environment. Point `DESIGN_STUDIO_URL` at the Design Studio deployment you intend to use.
 
