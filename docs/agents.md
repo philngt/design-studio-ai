@@ -27,7 +27,7 @@ This reference follows the current [CLI source](../packages/cli/src/dsa.ts) and 
 | `projects paint ID --file command.json` | Server-rendered stroke/fill using observed revision, painting generation and exact retry ID |
 | `projects document get/put/patch` | Canonical document reads and atomic expected-revision writes |
 | `projects document merge/changes` | Three-way merge using the exact earlier base, and revision polling |
-| `brief get/put/interview/approve` | Persisted interactive questions, answers, scope and explicit version-bound approval |
+| `brief get/history/put/interview/approve` | Persisted questions, answers, revision history, scope and explicit version-bound approval |
 | `observability summary/events/trace` | Owner-scoped activity, provider usage, and correlated spans; global reads require configured operator authorization |
 | `projects check` | Read-only preflight hints with exact layer IDs; inspect the actual preview too |
 | `projects inspect ID`, `projects overview` | Private saved-page, project contact-sheet, and workspace-cover PNGs with revision and pagination metadata |
@@ -87,6 +87,8 @@ The [deployment guide](deployment.md#activity-retention-and-optional-posthog) ow
 ## Revision workflow
 
 Start prompt-driven projects with a saved brief. `update_design_brief` (CLI `brief put`) accepts a request and agent-authored contextual questions/scope; it needs no BYOK key when the agent uses its own model. `interview_design_brief` optionally uses a configured provider. Show questions in the host conversation or Studio, save answers, review the scope, and call `approve_design_brief` only after the human approves that version. Brief revisions and document revisions are independent. Any brief edit invalidates approval. Provider generation requires approval when a brief exists. Manual editing remains available.
+
+Studio shows questions one at a time in its default Chat workspace. `get_design_brief_history` / `dsa brief history ID --after N` / WebMCP `studio_get_brief_history` read committed snapshots with `nextAfter` pagination; pre-migration history starts at the existing snapshot. Native in-editor agents use `purpose: interview` plus `expectedBriefRevision` before approval and a separate `design` session afterward; interview tools cannot edit or approve. See [coding agents](coding-agents.md) for the shared endpoint and CLI contract.
 
 Run `inspect_design` (CLI `projects check`) after saving: findings point to specific nodes and suggest corrections for fitting, bounds, media and contrast. These deterministic hints supplement visual inspection; overlapping backgrounds, font metrics, rotation and animated extremes require preview.
 

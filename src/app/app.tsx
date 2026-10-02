@@ -821,6 +821,8 @@ export function App() {
                   />
                   <div className="composer-footer">
                     <div className="composer-controls">
+                      <label className="composer-select"><Layers3 size={16}/><select aria-label="Design type" value={kind} onChange={e => { setKind(e.target.value as Kind); if (tab === 'templates') setFilter(e.target.value); }}>{kinds.map(k => <option key={k.id} value={k.id}>{k.name}</option>)}</select></label>
+                      <details className="home-create-options"><summary>Options</summary><div>
                       <label
                         className="icon-button import-button"
                         title="Import a design"
@@ -852,6 +854,7 @@ export function App() {
                           ))}
                         </select>
                       </label>
+                      </div></details>
                       {kind === "app" && (
                         <div className="app-target-options composer-app-targets" role="group" aria-label="App targets">
                           <span className="app-target-title"><Smartphone size={16} /> Targets</span>
@@ -888,25 +891,6 @@ export function App() {
                       )}
                     </button>
                   </div>
-                </div>
-                <div
-                  className="kind-picker"
-                  role="group"
-                  aria-label="Design type"
-                >
-                  {kinds.map((k) => (
-                    <button
-                      key={k.id}
-                      className={kind === k.id ? "selected" : ""}
-                      onClick={() => {
-                        setKind(k.id);
-                        if (tab === "templates") setFilter(k.id);
-                      }}
-                    >
-                      <k.icon size={17} />
-                      {k.name}
-                    </button>
-                  ))}
                 </div>
               </section>
             )}
@@ -971,7 +955,7 @@ export function App() {
               </section>
             ) : (
               <>
-                <section className="template-section">
+                <details className="home-template-browser" open={tab === 'templates' ? true : undefined} key={tab}><summary>Start from a template</summary><section className="template-section">
                   <div className="section-title">
                     <div>
                       <h2>
@@ -1050,7 +1034,7 @@ export function App() {
                       );
                     })}
                   </div>
-                </section>
+                </section></details>
                 {tab === "projects" && (
                   <section className="projects-section">
                     <div className="section-title">

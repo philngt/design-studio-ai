@@ -15,7 +15,7 @@ async function alpha(page: Page, x: number, y: number) {
   return canvas(page).evaluate((element: HTMLCanvasElement, point) => element.getContext('2d')!.getImageData(Math.floor(element.width * point.x), Math.floor(element.height * point.y), 1, 1).data[3], { x, y });
 }
 async function open(page: Page, id: string) {
-  await page.goto(`/?project=${id}`);
+  await page.goto(`/?project=${id}&mode=edit`);
   await page.getByRole('checkbox', { name: 'Live', exact: true }).uncheck();
   await page.getByRole('button', { name: 'Open painting studio', exact: true }).click();
   await ready(page);
@@ -127,7 +127,7 @@ test('failed paint upload survives reload and stays isolated across accounts in 
   expect(await alpha(page, .5, .5)).toBe(0);
   expect((await page.request.post('/api/auth/logout', { headers: { Origin: baseURL! } })).ok()).toBe(true);
   expect((await page.request.post('/api/auth/login', { headers: { Origin: baseURL! }, data: owner.credentials })).ok()).toBe(true);
-  await page.goto(`/?project=${owner.project.id}`);
+  await page.goto(`/?project=${owner.project.id}&mode=edit`);
   await page.getByRole('checkbox', { name: 'Live', exact: true }).uncheck();
   await page.getByRole('button', { name: 'Open painting studio', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Painting studio' }).getByRole('status')).toContainText('Recovered local changes');

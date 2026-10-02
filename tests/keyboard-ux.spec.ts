@@ -8,7 +8,7 @@ test.beforeEach(async ({ page, baseURL }) => {
   });
   expect(response.status()).toBe(201);
   const { project } = await response.json();
-  await page.goto(`/?project=${project.id}`);
+  await page.goto(`/?project=${project.id}&mode=edit`);
   await expect(page.locator('.node-target').first()).toBeVisible();
   await page.getByRole('checkbox', { name: 'Live', exact: true }).uncheck();
 });

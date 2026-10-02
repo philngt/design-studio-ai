@@ -7,7 +7,7 @@ import { createServer } from 'node:http';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { Readable, Writable } from 'node:stream';
 import { ClientSideConnection, ndJsonStream } from '@agentclientprotocol/sdk';
-import { agentProviders, agentTools, type AgentCatalog, type AgentEmission, type AgentProvider, type AgentToolName } from '../src/shared/agents';
+import { agentProviders, agentToolNames, type AgentCatalog, type AgentEmission, type AgentProvider, type AgentToolName } from '../src/shared/agents';
 import type { AgentRuntime, AgentRunInput } from './agent-runtime-contract';
 import { AgentProcess } from './agent-jsonl';
 
@@ -69,6 +69,10 @@ export class NodeAgentRuntime implements AgentRuntime {
   async interrupt(sessionId:string){const run=this.running.get(sessionId);if(!run)return;run.abort.abort();await run.close?.();}
   async close(){await Promise.all([...this.running.keys()].map(id=>this.interrupt(id)));}
   async run(input:AgentRunInput){
+    const availableTools = agentToolNames(input.purpose);
+    const turnInstructions = input.purpose === 'interview'
+      ? 'You clarify a design brief in Design Studio AI. First call studio_brief_context on every turn and read the saved answers and history. Ask concise questions only when information is missing. Use studio_submit_interview to save questions or a concrete scope using the observed brief revision. Questions are shown one at a time by Studio. Never invent user answers or approval. Never edit a design, use filesystem/shell tools or start other agents. Only the human can approve the scope.'
+      : instructions;
     if(this.running.has(input.sessionId))throw new Error('Session already running.');
     const run:Running={abort:new AbortController(),permission:new Map()};this.running.set(input.sessionId,run);
     const directory=resolve(this.root,input.sessionId);
@@ -95,7 +99,7 @@ export class NodeAgentRuntime implements AgentRuntime {
         const chunks:Buffer[]=[];let size=0;
         for await(const chunk of req){size+=chunk.length;if(size>21*1024*1024)throw new Error('Tool input too large.');chunks.push(chunk);}
         const {name,input:args}=JSON.parse(Buffer.concat(chunks).toString());
-        if(!Object.hasOwn(agentTools,name))throw new Error('Unknown draft tool.');
+        if(!availableTools.includes(name))throw new Error('Tool unavailable for this session purpose.');
         await emit({type:'tool',data:{name}});
         const result=await input.tool(name as AgentToolName,args);
         await emit({type:'tool_result',data:{name,success:true}});
@@ -109,13 +113,13 @@ export class NodeAgentRuntime implements AgentRuntime {
     if(run.abort.signal.aborted)throw abortError();
     await new Promise<void>((yes,no)=>{gateway.once('error',no);gateway.listen(0,'127.0.0.1',yes);});
     const address=gateway.address() as {port:number};
-    const env={...agentEnvironment(this.source),STUDIO_DRAFT_URL:`http://127.0.0.1:${address.port}/call`,STUDIO_DRAFT_TOKEN:token};
+    const env={...agentEnvironment(this.source),STUDIO_AGENT_PURPOSE:input.purpose??'design',STUDIO_DRAFT_URL:`http://127.0.0.1:${address.port}/call`,STUDIO_DRAFT_TOKEN:token};
     const bridge=fileURLToPath(new URL('./agent-mcp-bridge.ts',import.meta.url));
-    const mcp={command:process.execPath,args:['--import',fileURLToPath(new URL('../node_modules/tsx/dist/loader.mjs',import.meta.url)),bridge],env:{STUDIO_DRAFT_URL:env.STUDIO_DRAFT_URL,STUDIO_DRAFT_TOKEN:token}};
+    const mcp={command:process.execPath,args:['--import',fileURLToPath(new URL('../node_modules/tsx/dist/loader.mjs',import.meta.url)),bridge],env:{STUDIO_AGENT_PURPOSE:env.STUDIO_AGENT_PURPOSE,STUDIO_DRAFT_URL:env.STUDIO_DRAFT_URL,STUDIO_DRAFT_TOKEN:token}};
     if(run.abort.signal.aborted)throw abortError();
       if(input.provider==='claude'){
         const {query}=await import('@anthropic-ai/claude-agent-sdk');
-        const q=query({prompt:instructions+'\n\n'+input.prompt,options:{cwd:directory,env,pathToClaudeCodeExecutable:this.binary('claude'),model:input.model,resume:input.nativeHandle,includePartialMessages:true,abortController:run.abort,tools:[],settingSources:[],strictMcpConfig:true,mcpServers:{studio:mcp},canUseTool:async(name,args)=>{
+        const q=query({prompt:turnInstructions+'\n\n'+input.prompt,options:{cwd:directory,env,pathToClaudeCodeExecutable:this.binary('claude'),model:input.model,resume:input.nativeHandle,includePartialMessages:true,abortController:run.abort,tools:[],settingSources:[],strictMcpConfig:true,mcpServers:{studio:mcp},canUseTool:async(name,args)=>{
           if(name.startsWith('mcp__studio__'))return {behavior:'allow' as const,updatedInput:args};
           return {behavior:'deny' as const,message:'Only Studio draft tools are enabled for this session.'};
         }}});
@@ -152,7 +156,7 @@ export class NodeAgentRuntime implements AgentRuntime {
         await input.persistHandle(sessionId);
         if(input.model)await connection.unstable_setSessionModel({sessionId,modelId:input.model});
         acceptingUpdates=true;
-        const result=await connection.prompt({sessionId,prompt:[{type:'text',text:instructions+'\n\n'+input.prompt}]});
+        const result=await connection.prompt({sessionId,prompt:[{type:'text',text:turnInstructions+'\n\n'+input.prompt}]});
         if(result.stopReason==='cancelled')throw abortError();
         if(result.usage)await emit({type:'usage',data:{usage:result.usage,scope:'turn'}});
       }else if(input.provider==='opencode'){
@@ -192,7 +196,7 @@ export class NodeAgentRuntime implements AgentRuntime {
         const slash=input.model?.indexOf('/')??-1;
         if(input.model&&slash<=0)throw new Error('OpenCode models must use provider/model.');
         const model=input.model&&slash>0?{providerID:input.model.slice(0,slash),modelID:input.model.slice(slash+1)}:undefined;
-        const result=await client.session.prompt({path:{id:sessionId},body:{parts:[{type:'text',text:instructions+'\n\n'+input.prompt}],...(model?{model}: {})},signal:run.abort.signal});
+        const result=await client.session.prompt({path:{id:sessionId},body:{parts:[{type:'text',text:turnInstructions+'\n\n'+input.prompt}],...(model?{model}: {})},signal:run.abort.signal});
         if(result.error||result.data?.info?.error)throw new Error('OpenCode turn failed.');
         // Finish the consumer before reconciling the final text, avoiding late-delta duplicates.
         subscriptionAbort.abort();await consume.catch(()=>{});
@@ -203,7 +207,7 @@ export class NodeAgentRuntime implements AgentRuntime {
         await run.close();
       }else{
         const args=input.provider==='codex'?['app-server','--listen','stdio://','-c','features.shell_tool=false','-c',`mcp_servers.studio=${JSON.stringify(mcp).replace(/"([^"\\]+)":/g,'$1=')}`]
-          :['--mode','rpc','--tools',Object.keys(agentTools).join(','),'--no-extensions','--no-skills','--extension',fileURLToPath(new URL('./agent-pi-extension.ts',import.meta.url)),'--session-dir',directory,...(input.nativeHandle?['--session',input.nativeHandle]:[]),...(input.model?['--model',input.model]:[])];
+          :['--mode','rpc','--tools',availableTools.join(','),'--no-extensions','--no-skills','--extension',fileURLToPath(new URL('./agent-pi-extension.ts',import.meta.url)),'--session-dir',directory,...(input.nativeHandle?['--session',input.nativeHandle]:[]),...(input.model?['--model',input.model]:[])];
         const proc=new AgentProcess(this.binary(input.provider),args,directory,env);run.close=()=>proc.close();
         let finish!:()=>void,fail!:(error:Error)=>void;
         const completed=new Promise<void>((yes,no)=>{finish=yes;fail=no;});completed.catch(()=>{});
@@ -236,12 +240,12 @@ export class NodeAgentRuntime implements AgentRuntime {
         }).catch(fail);};
         if(input.provider==='codex'){
           await proc.request('initialize',{clientInfo:{name:'design_studio_ai',title:'Design Studio AI',version:'0.4.3'}});proc.write({method:'initialized',params:{}});
-          const thread=await proc.request(providerSession?'thread/resume':'thread/start',{...(providerSession?{threadId:providerSession}:{}),cwd:directory,...(input.model?{model:input.model}:{}),approvalPolicy:'untrusted',sandbox:'read-only',developerInstructions:instructions});
+          const thread=await proc.request(providerSession?'thread/resume':'thread/start',{...(providerSession?{threadId:providerSession}:{}),cwd:directory,...(input.model?{model:input.model}:{}),approvalPolicy:'untrusted',sandbox:'read-only',developerInstructions:turnInstructions});
           providerSession=thread.thread.id;await input.persistHandle(providerSession!);
           await proc.request('turn/start',{threadId:providerSession,input:[{type:'text',text:input.prompt}]});await completed;
         }else{
           const state=await proc.request('get_state',{},true);if(state.sessionFile)await input.persistHandle(state.sessionFile);
-          const response=await proc.request('prompt',{message:instructions+'\n\n'+input.prompt},true);
+          const response=await proc.request('prompt',{message:turnInstructions+'\n\n'+input.prompt},true);
           if(response.disposition!=='handled')await completed;
           const settled=await proc.request('get_state',{},true);if(settled.sessionFile)await input.persistHandle(settled.sessionFile);
           try{const stats=await proc.request('get_session_stats',{},true,5000);if(stats.tokens||typeof stats.cost==='number')await emit({type:'usage',data:{usage:stats.tokens??null,cost:stats.cost??null,scope:'session'}});}catch{ /* Missing accounting does not invalidate a completed draft. */ }

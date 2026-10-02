@@ -42,6 +42,7 @@ test('register, sign in, edit and save a template, find, duplicate, publish and 
     await page.getByRole('dialog').getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
 
+    await page.locator('.home-template-browser > summary').click();
     await page.locator('.template-card.template-web').click();
     await page.getByLabel('Project name', { exact: true }).fill(name);
     const creating = page.waitForResponse(response => response.url().endsWith('/api/projects') && response.request().method() === 'POST');
@@ -52,6 +53,7 @@ test('register, sign in, edit and save a template, find, duplicate, publish and 
     ownedProjects.add(project.id);
     expect(project.document.pages[0].nodes.length).toBeGreaterThan(3);
     await expect(page.getByRole('button', { name: 'Back to workspace' })).toBeVisible();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
     // This workflow verifies the explicit Save response; live autosave has its own coverage.
     await page.getByRole('checkbox', { name: 'Live', exact: true }).uncheck();
     await fitsViewport(page);
@@ -93,6 +95,8 @@ test('register, sign in, edit and save a template, find, duplicate, publish and 
     expect(copy.document.pages[0].nodes.some(node => node.text === text)).toBe(true);
     await expect(page.locator('.project-card')).toHaveCount(2);
     await page.locator('.project-card').filter({ has: page.getByText(name, { exact: true }) }).locator('.project-open').click();
+    await expect(page.locator('.editor-shell')).toHaveClass(/conversation-mode/);
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
     if (mobile) await page.locator('.mobile-editor-nav').getByRole('button', { name: 'Chat & layers', exact: true }).click();
     await page.getByRole('button', { name: 'Layers', exact: true }).click();
     await page.getByRole('button', { name: 'Your text', exact: true }).click();

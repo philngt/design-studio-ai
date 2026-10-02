@@ -9,7 +9,7 @@ test('sidebar toggles control preview independently and preserve edit preference
   });
   expect(response.status()).toBe(201);
   const { project } = await response.json();
-  await page.goto(`/?project=${project.id}`);
+  await page.goto(`/?project=${project.id}&mode=edit`);
   const left = page.locator('.left-panel'), right = page.locator('.inspector');
   const toggle = (name: string) => page.getByRole('button', { name, exact: true }).click();
   await expect(left).toBeVisible(); await expect(right).toBeVisible();

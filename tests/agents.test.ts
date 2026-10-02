@@ -120,6 +120,41 @@ test('coding-agent HTTP contract uses real SQLite, owner checks, draft tools and
       await json(await request(path+'/proposal/discard','POST',{proposalVersion:current.proposal!.version}));
       assert.equal((await json(await request(path))).session.proposal,null);
     });
+    await t.test('interview sessions persist questions and history but cannot edit or approve a design',async()=>{
+      const briefPath=`/api/projects/${project.id}/brief`;
+      let current=(await json(await request(briefPath))).brief;
+      await json(await request(root,'POST',{provider:'codex',purpose:'interview',expectedRevision:project.revision}),409);
+      const interview=(await json(await request(root,'POST',{provider:'codex',purpose:'interview',expectedRevision:project.revision,expectedBriefRevision:current.revision}),201)).session;
+      assert.equal(interview.purpose,'interview');
+      const interviewPath=agentSessionPath(project.id,interview.id);
+      let assertions=0;
+      onRun=async input=>{
+        assert.equal(input.purpose,'interview');
+        const context=await input.tool('studio_brief_context',{}) as any;
+        await assert.rejects(input.tool('studio_edit',{version:0,operations:[{op:'rename',name:'Unauthorized'}]}),/not available/);
+        await assert.rejects(input.tool('studio_context',{}),/not available/);
+        await assert.rejects(input.tool('studio_submit_interview',{expectedRevision:context.brief.revision-1,interview:{message:'Scope',questions:[],scope:{objective:'Website',audience:'Readers',direction:'Readable',deliverables:['Page'],constraints:[],acceptanceCriteria:['Clear title']}}}),/brief changed/);
+        await input.tool('studio_submit_interview',{expectedRevision:context.brief.revision,interview:{message:'Who is it for?',questions:[{id:'audience',title:'Who is it for?',type:'single',options:['Readers','Writers'],required:true}],scope:null}});
+        assertions++;
+      };
+      await json(await request(interviewPath+'/messages','POST',{requestId:crypto.randomUUID(),prompt:'Ask about my idea',expectedRevision:project.revision,expectedBriefRevision:current.revision}),202);
+      await settle(interview.id,project.id);assert.equal(assertions,1);
+      current=(await json(await request(briefPath))).brief;
+      assert.equal(current.questions[0].id,'audience');assert.equal(current.status,'interview');
+      current=(await json(await request(briefPath,'PUT',{expectedRevision:current.revision,answers:{audience:'Readers'},scope:{objective:'Website',audience:'Readers',direction:'Readable',deliverables:['Page'],constraints:[],acceptanceCriteria:['Clear title']}}))).brief;
+      const history=await json(await request(briefPath+'/history'));
+      assert.deepEqual(history.history.map((b:any)=>b.revision),[1,2,3]);
+      assert.equal(history.history[1].answers.audience,undefined);assert.equal(history.history[2].answers.audience,'Readers');
+      await json(await request(briefPath+'/history','GET',undefined,otherCookie),404);
+      await json(await request(briefPath,'PUT',{expectedRevision:1,request:'stale'}),409);
+      assert.equal((await json(await request(briefPath+'/history'))).history.length,3);
+      await json(await request(interviewPath+'/proposal/apply','POST',{proposalVersion:0}),403);
+      await json(await request(briefPath+'/approve','POST',{expectedRevision:current.revision}));
+      await json(await request(interviewPath+'/messages','POST',{requestId:crypto.randomUUID(),prompt:'Keep interviewing',expectedRevision:project.revision,expectedBriefRevision:current.revision+1}),409);
+      assert.equal((await json(await request(briefPath+'/history?after=3'))).history[0].status,'approved');
+      assert.equal((await create()).purpose,'design');
+      assert.equal((await json(await request(`/api/projects/${project.id}`))).project.document.name,'Manual edit');
+    });
     await t.test('project deletion revokes draft access and stops only its owned sessions',async()=>{
       const deleting=(await json(await request('/api/projects','POST',{name:'Delete active agent',kind:'web'}),201)).project;
       const deletingSession=(await json(await request(agentSessionPath(deleting.id),'POST',{provider:'codex',expectedRevision:deleting.revision}),201)).session;

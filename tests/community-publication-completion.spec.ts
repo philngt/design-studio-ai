@@ -14,7 +14,7 @@ test('congratulations appears only after the actual publication job succeeds and
   const created = await page.request.post('/api/projects', { headers, data: { name: 'Real completed publication', kind: 'web' } });
   expect(created.status()).toBe(201);
   const { project } = await created.json();
-  await page.goto(`/?project=${project.id}`);
+  await page.goto(`/?project=${project.id}&mode=edit`);
   await page.getByRole('button', { name: 'Publish to Community', exact: true }).click();
   const details = page.getByRole('dialog', { name: 'Publish to Community', exact: true });
   await details.getByLabel('Description', { exact: true }).fill('A local publication with real exported files.');
@@ -87,7 +87,7 @@ test('a failed-status transport fixture returns to fresh listing details and ret
   const created = await page.request.post('/api/projects', { headers, data: { name: 'Publication retry design', kind: 'web' } });
   expect(created.status()).toBe(201);
   const { project } = await created.json();
-  await page.goto(`/?project=${project.id}`);
+  await page.goto(`/?project=${project.id}&mode=edit`);
   await page.getByRole('button', { name: 'Publish to Community', exact: true }).click();
   let details = page.getByRole('dialog', { name: 'Publish to Community', exact: true });
   await details.getByLabel('Description', { exact: true }).fill('Recover publication with a fresh listing revision.');

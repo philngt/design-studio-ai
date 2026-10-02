@@ -8,7 +8,7 @@ test('real editor stores smooth ink and layered paint, reloads them and excludes
   const signup = await page.request.post('/api/auth/register', { headers, data: { email: `creative-${randomUUID()}@studio.test`, password: randomUUID() + randomUUID(), name: 'Creative acceptance' } }); expect(signup.status()).toBe(201);
   const created = await page.request.post('/api/projects', { headers, data: { kind: 'web', name: 'Creative acceptance' } }); expect(created.status()).toBe(201);
   const { project } = await created.json();
-  await page.goto(`/?project=${project.id}`);
+  await page.goto(`/?project=${project.id}&mode=edit`);
   await page.getByRole('checkbox', { name: 'Live', exact: true }).uncheck();
   await page.getByRole('button', { name: 'Open creative board', exact: true }).click();
   const canvas = page.getByLabel('Drawing canvas', { exact: true }), box = await canvas.boundingBox(); expect(box).toBeTruthy();
@@ -89,7 +89,7 @@ test('a live response arriving inside painting waits, then preserves both the st
   await page.route(`**/api/projects/${project.id}/changes?*`, async route => {
     requests++; if (requests === 1) { started(); await gate; } await route.continue();
   });
-  await page.goto(`/?project=${project.id}`);
+  await page.goto(`/?project=${project.id}&mode=edit`);
   await observed;
   await page.getByRole('button', { name: 'Open painting studio', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Close painting studio' })).toBeEnabled();

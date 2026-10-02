@@ -62,7 +62,7 @@ test('a new creator generates and saves a public profile from the project public
   page.on('request', request => {
     if (request.url().endsWith(profilePath) && request.method() === 'PUT') writes.push(request.postDataJSON());
   });
-  await page.goto(`/?project=${project.id}`);
+  await page.goto(`/?project=${project.id}&mode=edit`);
   await page.getByRole('button', { name: 'Publish to Community', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Publish to Community', exact: true });
   await expect(dialog.getByRole('heading', { name: 'Choose your public identity', exact: true })).toBeVisible();

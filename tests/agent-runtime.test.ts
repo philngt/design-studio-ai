@@ -36,6 +36,14 @@ test('all native adapters connect to contract subprocesses, call the draft gatew
       const rejected=assert.rejects(turn,error=>error instanceof Error&&error.name==='AbortError');
       await ready;await runtime.interrupt(sessionId);await rejected;
     });
+    for(const {id} of agentProviders)await t.test(`${id} interviews cannot access the design gateway`,{timeout:15000},async()=>{
+      const calls:string[]=[];
+      await runtime.run({sessionId:crypto.randomUUID(),provider:id,purpose:'interview',prompt:'Clarify my idea',emit:async()=>{},persistHandle:async()=>{},tool:async(name,input:any)=>{
+        calls.push(name);if(name==='studio_brief_context')return {brief:{revision:3}};
+        assert.equal(name,'studio_submit_interview');assert.equal(input.expectedRevision,3);assert.equal(input.interview.questions[0].id,'audience');return {brief:{revision:4}};
+      }});
+      assert.deepEqual(calls,['studio_brief_context','studio_submit_interview']);
+    });
   }finally{await runtime.close();await rm(directory,{recursive:true,force:true});}
 });
 test('missing executable rejects requests and process teardown does not hang',{timeout:3000},async()=>{

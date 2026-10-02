@@ -23,6 +23,13 @@ export async function readBrief(c: Context<Env>, projectId: string): Promise<Des
   const row = await c.env.DB.prepare('SELECT brief FROM design_briefs WHERE project_id=? AND user_id=?').bind(projectId, owner(c)).first<{ brief: string }>();
   return row ? JSON.parse(row.brief) as DesignBrief : null;
 }
+export async function readBriefHistory(c: Context<Env>, projectId: string, after = 0) {
+  await projectRow(c, projectId);
+  const rows = await c.env.DB.prepare('SELECT brief FROM brief_history WHERE project_id=? AND user_id=? AND revision>? ORDER BY revision LIMIT 51')
+    .bind(projectId, owner(c), after).all<{ brief: string }>();
+  const history = rows.results.slice(0, 50).map(row => JSON.parse(row.brief) as DesignBrief);
+  return { history, nextAfter: rows.results.length > 50 ? history.at(-1)!.revision : null };
+}
 function checkRevision(brief: DesignBrief | null, revision: number) {
   if ((brief?.revision ?? 0) !== revision) fail(409, 'revision_conflict', 'The brief changed. Reload it before saving or approving.');
 }
@@ -88,6 +95,7 @@ export async function saveBrief(c: Context<Env>, projectId: string, input: Brief
 
 export const briefRoutes = new Hono<Env>();
 briefRoutes.get('/:id/brief', async c => c.json({ brief: await readBrief(c, c.req.param('id')) }));
+briefRoutes.get('/:id/brief/history', async c => c.json(await readBriefHistory(c, c.req.param('id'), z.coerce.number().int().nonnegative().parse(c.req.query('after') ?? 0))));
 briefRoutes.put('/:id/brief', async c => c.json({ brief: await saveBrief(c, c.req.param('id'), await c.req.json()) }));
 briefRoutes.post('/:id/brief/approve', async c => {
   const body = z.object({ expectedRevision: revisionSchema }).strict().parse(await c.req.json());

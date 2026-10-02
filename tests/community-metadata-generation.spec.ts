@@ -25,7 +25,7 @@ async function openPublication(page: Page, baseURL: string, configured = provide
   // Provider discovery and generation are isolated here; project/profile reads,
   // saved revisions and publication preflight use the actual local API.
   await page.route('**/api/providers', route => route.fulfill({ json: { providers: configured } }));
-  await page.goto(`/?project=${project.id}`);
+  await page.goto(`/?project=${project.id}&mode=edit`);
   await page.getByRole('button', { name: 'Publish to Community', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Publish to Community', exact: true });
   const ai = dialog.getByRole('region', { name: 'AI listing suggestions' });

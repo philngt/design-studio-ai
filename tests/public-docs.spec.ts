@@ -60,10 +60,13 @@ test('public HTML and agent references have real content, correct types, and pub
   }
   const apiMarkdown = await (await request.get('/docs/api.md')).text();
   expect(apiMarkdown).toContain('## POST /api/projects/:id/brief/approve');
+  expect(apiMarkdown).toContain('## GET /api/projects/:id/brief/history');
   expect(apiMarkdown).toContain('## GET /api/projects/:id/checks');
   expect(apiMarkdown).toContain('expectedRevision');
   const schema = await (await request.get('/api/schema')).json();
   expect(schema.codingAgents.create.properties.provider.enum).toEqual(['claude','codex','copilot','opencode','pi']);
+  expect(schema.codingAgents.create.properties.purpose.default).toBe('design');
+  expect(schema.codingAgents.create.properties.purpose.enum).toEqual(['interview','design']);
   expect(Object.keys(schema).sort()).toEqual(['clientEvent', 'codingAgents', 'community', 'designSystem', 'document', 'documentSave', 'documentWrite', 'exportInput', 'generationInput', 'interview', 'mediaInput', 'motionProposal', 'observabilityQuery', 'operationJob', 'operations', 'paintingCommand', 'providerId', 'providerInterview', 'providerSettings', 'providers', 'sceneCommands', 'scope', 'supportedDocumentVersions', 'visualInspection', 'workspaceInspection']);
   expect(schema.visualInspection.properties.mode.enum).toEqual(['page', 'overview']);
   expect(schema.visualInspection.properties.expectedRevision).toBeDefined();
@@ -85,6 +88,7 @@ test('public HTML and agent references have real content, correct types, and pub
   expect(Object.keys(openapi.components.schemas).every(name => /^[\w.-]+$/.test(name))).toBe(true);
   expect(openapi.paths['/api/projects/{id}/assets'].post.requestBody.content['multipart/form-data'].schema.properties.file.format).toBe('binary');
   expect(openapi.paths['/api/fonts'].get.parameters).toContainEqual(expect.objectContaining({ name: 'q', in: 'query' }));
+  expect(openapi.paths['/api/projects/{id}/brief/history'].get.parameters).toContainEqual(expect.objectContaining({ name: 'after', in: 'query' }));
   expect(openapi.paths['/api/design-systems/{id}'].get.parameters).toContainEqual(expect.objectContaining({ name: 'version', in: 'query' }));
   expect(apiMarkdown).toContain('## POST /api/design-systems');
   const sitemap = await request.get('/sitemap.xml');
@@ -95,10 +99,12 @@ test('public HTML and agent references have real content, correct types, and pub
   expect(llms.headers()['content-type']).toContain('text/plain');
   const llmsText = await llms.text();
   expect(llmsText).toMatch(/^# Design Studio AI\s+>/);
+  expect(llmsText).toContain('only explicit Apply saves the design');
   expect(llmsText.lastIndexOf('## Optional')).toBeGreaterThan(llmsText.indexOf('## Reference'));
   const full = await (await request.get('/llms-full.txt')).text();
   expect(full).toContain('STUDIO_AGENT_OWNER_ID');expect(full).toContain('agents send PROJECT_ID SESSION_ID');
   expect(full).toContain('approve_design_brief');
+  expect(full).toContain('get_design_brief_history');
   expect(full).toContain('studio_inspect_design');
   const robots = await request.get('/robots.txt');
   expect(robots.headers()['content-type']).toContain('text/plain');
@@ -125,7 +131,8 @@ test('documentation and visual guide remain readable and navigable without JavaS
     await expect(steps).toHaveCount(6);
     await steps.nth(2).click();
     await expect(page.locator('#conversation')).toBeInViewport();
-    await expect(page.locator('#conversation')).toContainText('Approve scope');
+    await expect(page.locator('#conversation')).toContainText('Approve and create');
+    await expect(page.locator('#conversation')).toContainText('only Apply proposal saves it');
     await fitsViewport(page);
     // The guide renders one figure per GuideImage in src/app/guide.tsx; require the known two so the
     // loop cannot silently cover nothing, without breaking when a third screenshot is added.

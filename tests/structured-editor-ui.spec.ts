@@ -24,7 +24,7 @@ async function selectLayer(page: Page, info: TestInfo, name: string) {
   await page.getByRole('tree', { name: 'Layers' }).getByRole('button', { name, exact: true }).click();
 }
 async function openProject(page: Page, id: string) {
-  await page.goto(`/?project=${id}`);
+  await page.goto(`/?project=${id}&mode=edit`);
   await expect(page.getByRole('button', { name: 'Back to workspace' })).toBeVisible();
 }
 async function saveProject(page: Page, id: string) {

@@ -14,7 +14,7 @@ async function setup(page: Page, origin: string) {
   const response = await page.request.post('/api/projects', { headers: { Origin: origin }, data: { name: document.name, kind: document.kind, document } });
   expect(response.status()).toBe(201);
   const { project } = await response.json() as { project: Project };
-  await page.goto(`/?project=${project.id}`);
+  await page.goto(`/?project=${project.id}&mode=edit`);
   await expect(page.locator('.node-target')).toHaveCount(3);
   await page.getByRole('checkbox', { name: 'Live', exact: true }).uncheck();
   return project;
@@ -114,7 +114,7 @@ test('structured rotated text uses measured bounds and retains the canvas backgr
   ] }];
   const response = await page.request.post('/api/projects', { headers: { Origin: baseURL! }, data: { name: document.name, kind: document.kind, document } });
   expect(response.status()).toBe(201); const { project } = await response.json() as { project: Project };
-  await page.goto(`/?project=${project.id}`); await page.getByRole('checkbox', { name: 'Live', exact: true }).uncheck();
+  await page.goto(`/?project=${project.id}&mode=edit`); await page.getByRole('checkbox', { name: 'Live', exact: true }).uncheck();
   const target = page.getByRole('button', { name: 'Nested label, text', exact: true });
   await expect(target).toHaveCSS('transform', 'matrix(0.866025, 0.5, -0.5, 0.866025, 0, 0)');
   const geometry = await target.evaluate(element => { const style = (element as HTMLElement).style; return { left: style.left, top: style.top, width: style.width, height: style.height, transform: style.transform }; });

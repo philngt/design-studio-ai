@@ -141,6 +141,11 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
     async ({projectId}) => callApi('GET', `/api/projects/${encodeURIComponent(projectId)}/brief`),
   );
   server.registerTool(
+    'get_design_brief_history',
+    {description:'Read committed brief snapshots after a revision. Follow nextAfter until null to restore earlier questions and answers.',inputSchema:{projectId:z.string(),after:z.number().int().nonnegative().optional()},annotations:{readOnlyHint:true}},
+    async ({projectId,after}) => callApi('GET', `/api/projects/${encodeURIComponent(projectId)}/brief/history?after=${after ?? 0}`),
+  );
+  server.registerTool(
     'update_design_brief',
     {description:'Start or update an interview using your own model without a server provider key. Supply contextual questions and a proposed scope; show questions to the human in your chat or the Studio UI. Every edit invalidates approval. expectedRevision is the brief revision (0 creates), independent from document revision.', inputSchema:{projectId:z.string(),expectedRevision:z.number().int().min(0),request:z.string().trim().min(1).max(12000).optional(),interview:interviewSchema.optional(),answers:answerSchema.optional(),scope:scopeSchema.optional()}},
     async ({projectId,...body}) => callApi('PUT', `/api/projects/${encodeURIComponent(projectId)}/brief`,body),

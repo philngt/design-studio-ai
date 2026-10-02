@@ -16,7 +16,7 @@ This repository tracks and extends the upstream Design Studio AI project.
 - CLI and agents should set `DESIGN_STUDIO_URL` to the intended deployment.
 - Upstream copyright and MIT license attribution are preserved.
 
-![Current Design Studio workspace with prompt composer, Activity navigation, and starter templates including mobile, tablet, and desktop apps](docs/assets/workspace-current.png)
+![Simplified workspace with one prompt, compact design-type selection, recent projects and optional templates](docs/assets/workspace-current.png)
 
 ## Capabilities
 
@@ -30,7 +30,7 @@ This repository tracks and extends the upstream Design Studio AI project.
 - Owner-scoped activity, correlated request/provider traces, and reported token/cost usage with explicit coverage; optional operator views and PostHog forwarding.
 - Cloudflare hosting or Docker self-hosting with persistent SQLite/files.
 - Email/password and optional GitHub sign-in, with explicit account linking in Settings.
-- Persisted contextual interviews, editable scopes, explicit approval, and shared REST/MCP/CLI/WebMCP access to the same brief.
+- One continuous chat: contextual questions, saved answers, editable scope, explicit approval, draft preview and Apply/Discard. Detailed editing stays one click away.
 - System/light/dark appearance, keyboard-friendly mobile controls, and design checks that locate likely text overflow, missing media, and contrast issues without changing the canvas.
 
 Generation calls real providers and requires your credentials and account access. It returns a proposal or asset; saved designs change through explicit revision-checked writes.
@@ -62,14 +62,14 @@ SQLite and assets persist under `DATA_DIR` (default `data`). See [deployment ins
 
 The self-hosted editor also supports opt-in Claude Code, Codex, Copilot, OpenCode and Pi sessions. They edit drafts for explicit human Apply/Discard, using CLI credentials for one operator-designated Studio account. See [coding-agent setup](docs/coding-agents.md); no Paseo service is required. This is available on Node/Docker, not Cloudflare Workers.
 
-![Desktop editor with Coding agent mode selected, Codex provider and model controls, a saved landing-page canvas, and an unsent design request](docs/assets/coding-agents-desktop.png)
+![Chat and preview workspace with a compact AI picker set to Codex, a saved landing page and an unsent design request](docs/assets/coding-agents-desktop.png)
 
-The coding-agent interface sits beside the saved canvas. These screenshots show a built-in template and an unsent request, not a generated result; running an agent requires server-side CLI authentication.
+API connections and coding agents share one AI picker. Model and session controls are optional; mobile uses Chat / Preview tabs. These screenshots show a built-in template and an unsent request, not a generated result; running an agent requires server-side CLI authentication.
 
 <details>
 <summary>Coding-agent interface on mobile</summary>
 
-<img src="docs/assets/coding-agents-mobile.png" width="390" alt="Mobile Chat and layers pane with Coding agent mode, session, provider and model controls, draft-only guidance, and Send to agent">
+<img src="docs/assets/coding-agents-mobile.png" width="390" alt="Mobile Chat tab with a focused conversation, compact Codex selection and an unsent message; Preview is one tab away">
 
 </details>
 
