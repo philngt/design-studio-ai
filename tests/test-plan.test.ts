@@ -46,7 +46,7 @@ test('a scoped change selects its mapped specs and always runs the safety set', 
   assert.deepEqual([...lanes].sort(), [...selected.specs].sort(), 'lanes must cover every selected spec');
 
   // A changed spec runs itself; a changed unit file is covered by this always-full lane.
-  assert.deepEqual(plan(['--files=tests/slide-navigation.spec.ts']).specs, ['tests/account-ui.spec.ts', 'tests/community-moderation-ui.spec.ts', 'tests/community-publish-ui.spec.ts', 'tests/oauth-browser.spec.ts', 'tests/slide-navigation.spec.ts', 'tests/workspace.spec.ts']);
+  assert.deepEqual(plan(['--files=tests/slide-navigation.spec.ts']).specs, [...new Set(['tests/account-ui.spec.ts', 'tests/community-moderation-ui.spec.ts', 'tests/community-publish-ui.spec.ts', 'tests/oauth-browser.spec.ts', 'tests/slide-navigation.spec.ts', 'tests/workspace.spec.ts', ...fullUnmapped()])].sort());
   assert.equal(plan(['--files=tests/briefs.test.ts']).mode, 'selected');
 
   // Documentation-only changes are inert for the browser lane (the public docs surface is generated
@@ -56,3 +56,6 @@ test('a scoped change selects its mapped specs and always runs the safety set', 
   assert.deepEqual(docs.specs, []);
   assert.equal(plan(['--files=docs/providers.md,src/app/community.tsx']).mode, 'selected');
 });
+
+// Unmapped specs intentionally run on every code diff; account for them without dropping coverage.
+function fullUnmapped():string[]{return plan(['--mode=full']).coverage.unmapped.map((name:string)=>`tests/${name}`);}

@@ -92,6 +92,10 @@ The [nightly workflow](../.github/workflows/nightly.yml) runs the full browser s
 
 ## Optional integrations
 
+### Self-hosted coding agents
+
+See [coding agents](coding-agents.md) for CLI installation/login, the `STUDIO_AGENTS_ENABLED` and single-account `STUDIO_AGENT_OWNER_ID` gate, Docker package pins and persistent agent-home credentials. Migration `0016-coding-agents.sql` adds sessions, turns and durable events without rewriting documents. Node applies it on startup; Cloudflare may apply the schema but cannot execute CLIs. Preserve `/data/agent-workspaces` and the separate CLI home privately when backing up. Agents must run under a dedicated OS account/container; draft-tool restrictions are not an OS sandbox.
+
 ### GitHub sign-in
 
 Create a GitHub OAuth App with callback `https://YOUR_ORIGIN/api/auth/github/callback`. Configure `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, and `GITHUB_CALLBACK_URL` in the application runtime; the callback must exactly match `APP_URL`'s origin and this path. Keep `ENCRYPTION_KEY` configured for encrypted short-lived PKCE verifiers. For Cloudflare, set these values with Wrangler secrets; for Node, export them before starting the server. Compose forwards the three variables from its environment.

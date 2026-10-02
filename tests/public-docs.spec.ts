@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 
-const publicPaths = ['/docs/community', '/', '/guide', '/docs', '/docs/revisions', '/docs/motion', '/docs/3d', '/docs/api', '/docs/cli', '/docs/mcp', '/docs/webmcp', '/docs/api-keys', '/docs/observability', '/docs/self-hosting'];
-const markdownPaths = ['/docs/community.md', '/docs.md', '/guide.md', '/docs/index.md', '/docs/quickstart.md', '/docs/revisions.md', '/docs/motion.md', '/docs/3d.md', '/docs/api.md', '/docs/cli.md', '/docs/mcp.md', '/docs/webmcp.md', '/docs/api-keys.md', '/docs/observability.md', '/docs/self-hosting.md'];
+const publicPaths = ['/docs/coding-agents', '/docs/community', '/', '/guide', '/docs', '/docs/revisions', '/docs/motion', '/docs/3d', '/docs/api', '/docs/cli', '/docs/mcp', '/docs/webmcp', '/docs/api-keys', '/docs/observability', '/docs/self-hosting'];
+const markdownPaths = ['/docs/coding-agents.md', '/docs/community.md', '/docs.md', '/guide.md', '/docs/index.md', '/docs/quickstart.md', '/docs/revisions.md', '/docs/motion.md', '/docs/3d.md', '/docs/api.md', '/docs/cli.md', '/docs/mcp.md', '/docs/webmcp.md', '/docs/api-keys.md', '/docs/observability.md', '/docs/self-hosting.md'];
 async function fitsViewport(page: Page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
 }
@@ -63,7 +63,8 @@ test('public HTML and agent references have real content, correct types, and pub
   expect(apiMarkdown).toContain('## GET /api/projects/:id/checks');
   expect(apiMarkdown).toContain('expectedRevision');
   const schema = await (await request.get('/api/schema')).json();
-  expect(Object.keys(schema).sort()).toEqual(['clientEvent', 'community', 'designSystem', 'document', 'documentSave', 'documentWrite', 'exportInput', 'generationInput', 'interview', 'mediaInput', 'motionProposal', 'observabilityQuery', 'operationJob', 'operations', 'paintingCommand', 'providerId', 'providerInterview', 'providerSettings', 'providers', 'sceneCommands', 'scope', 'supportedDocumentVersions', 'visualInspection', 'workspaceInspection']);
+  expect(schema.codingAgents.create.properties.provider.enum).toEqual(['claude','codex','copilot','opencode','pi']);
+  expect(Object.keys(schema).sort()).toEqual(['clientEvent', 'codingAgents', 'community', 'designSystem', 'document', 'documentSave', 'documentWrite', 'exportInput', 'generationInput', 'interview', 'mediaInput', 'motionProposal', 'observabilityQuery', 'operationJob', 'operations', 'paintingCommand', 'providerId', 'providerInterview', 'providerSettings', 'providers', 'sceneCommands', 'scope', 'supportedDocumentVersions', 'visualInspection', 'workspaceInspection']);
   expect(schema.visualInspection.properties.mode.enum).toEqual(['page', 'overview']);
   expect(schema.visualInspection.properties.expectedRevision).toBeDefined();
   expect(schema.workspaceInspection.properties.limit.maximum).toBe(12);
@@ -96,6 +97,7 @@ test('public HTML and agent references have real content, correct types, and pub
   expect(llmsText).toMatch(/^# Design Studio AI\s+>/);
   expect(llmsText.lastIndexOf('## Optional')).toBeGreaterThan(llmsText.indexOf('## Reference'));
   const full = await (await request.get('/llms-full.txt')).text();
+  expect(full).toContain('STUDIO_AGENT_OWNER_ID');expect(full).toContain('agents send PROJECT_ID SESSION_ID');
   expect(full).toContain('approve_design_brief');
   expect(full).toContain('studio_inspect_design');
   const robots = await request.get('/robots.txt');

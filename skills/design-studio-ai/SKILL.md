@@ -34,6 +34,8 @@ For browser WebMCP, registered operation/document inputs are compact envelopes; 
 
 ## Choose the design-kind guidance
 
+For self-hosted in-editor coding agents, discover `dsa agents schema` or MCP `agent_*` tools. This is an opt-in Node workflow for one designated account; ordinary MCP OAuth cannot run the host's CLI credentials. Keep a stable request UUID and exact body for send retries, follow durable event sequences, and treat results as drafts. Read the proposal and show it to the human before `agents apply --proposal-version N`; never infer approval from a completed turn. Stop preserves draft edits. Document/brief conflicts require reconciliation or discard, not a higher revision to force a stale draft through. Installation detection is not proof of authentication or generation. Use the configured server's `/docs/coding-agents` for setup and native CLI limits; this workflow does not authorize shell/Git work or publication.
+
 Before creating or substantially refining a design, read [shared layout and quality](references/layout-and-quality.md), then the reference matching the actual document `kind`. For mixed work, read each relevant reference; preserve the approved brief and user taste. These references guide composition and review, while live schemas remain authoritative for fields and limits.
 
 | Kind | Guidance |

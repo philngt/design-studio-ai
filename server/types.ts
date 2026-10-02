@@ -24,6 +24,9 @@ export interface Bucket {
   delete(key: string): Promise<unknown>;
 }
 export interface Bindings {
+  AGENT_RUNTIME?: import('./agent-runtime-contract').AgentRuntime;
+  STUDIO_AGENTS_ENABLED?: string;
+  STUDIO_AGENT_OWNER_ID?: string;
   OPERATION_QUEUE?: {send(message:{id:string;kind?:'community'}):Promise<void>};
   COMMUNITY_ENABLED?: string;
   COMMUNITY_ADMIN_IDS?: string;

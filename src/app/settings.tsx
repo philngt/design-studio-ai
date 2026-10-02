@@ -1,6 +1,7 @@
 import { useScreenState } from './screen-state';
 import { useEffect, useState } from "react";
 import { ProviderSettings } from './provider-settings';
+import { CodingAgentSettings } from './agent-panel';
 import {
   Check,
   Code2,
@@ -156,6 +157,7 @@ export function Settings({
           {tab === "providers" && <ProviderSettings providers={providers} onChanged={load} />}
           {tab === "agents" && (
             <>
+              <CodingAgentSettings />
               <h3>A workspace your agents can use.</h3>
               <p className="modal-description">
                 Connect an MCP client with this address. OAuth clients can

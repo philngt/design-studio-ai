@@ -45,6 +45,7 @@ const CORE_PATHS = [
 const DOCS_PATHS = [/^docs\//, /^README\.md$/, /^(AGENTS|CLAUDE)\.md$/, /^skills\//, /^LICENSE$/, /^plans\//];
 
 const AREAS = [
+  {name:'coding-agents',paths:[/^server\/agent/,/^src\/shared\/agent/,/^src\/app\/agent/,/^src\/app\/coding-agent/],specs:['coding-agents-ui.spec.ts']},
   {
     name: 'community',
     paths: [/^src\/app\/community/, /^src\/app\/browser-community-tools/, /^src\/shared\/community/, /^src\/shared\/public-metadata/, /^server\/community-/, /^migrations\/00(13|14)-community/],

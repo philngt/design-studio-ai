@@ -1,4 +1,5 @@
 import {operationJobSchema} from '../src/shared/operation-jobs';
+import { registerAgentApiTools } from './agent-api-tools';
 import { visualInspectionSchema, workspaceInspectionSchema, visualInspectionContent, type VisualInspectionResult } from '../src/shared/visual-inspection';
 import { sceneRequestSchema } from '../src/shared/scene-authoring-schema';
 import { paintingCommandSchema } from '../src/shared/painting-command';
@@ -110,6 +111,7 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
   server.registerTool('start_operation',{description:'Start a durable save or export job. Reuse the same operation ID and payload after an uncertain response.',inputSchema:{projectId:z.string(),request:operationJobSchema}},async ({projectId,request})=>callApi('POST',`/api/projects/${encodeURIComponent(projectId)}/operations`,request));
   server.registerTool('get_operation',{description:'Read durable operation status and private result URL.',inputSchema:{projectId:z.string(),operationId:z.string()},annotations:{readOnlyHint:true}},async ({projectId,operationId})=>callApi('GET',`/api/projects/${encodeURIComponent(projectId)}/operations/${encodeURIComponent(operationId)}`));
   registerDesignSystemTools(server, callApi);
+  registerAgentApiTools(server, callApi);
   registerCommunityTools(server, async (method,path,body)=>app.request(`${origin(c)}${path}`,{
     method,headers:{Authorization:c.req.header('Authorization')!,'X-Studio-Client':'mcp',...(body!==undefined&&!(body instanceof FormData)?{'Content-Type':'application/json'}:{})},
     ...(body===undefined?{}:{body:body instanceof FormData?body:JSON.stringify(body)}),
