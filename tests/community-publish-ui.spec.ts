@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 test('publish reviews a saved revision and explicit license before building real files',async({page,baseURL},testInfo)=>{
   test.setTimeout(180_000);
   const headers={Origin:baseURL!};const created=await page.request.post('/api/projects',{headers,data:{name:'Community publication browser check',kind:'web'}});expect(created.status()).toBe(201);const {project}=await created.json();
-  await page.goto(`/?project=${project.id}`);await page.getByRole('button',{name:'Publish to Community',exact:true}).click();
+  await page.goto(`/?project=${project.id}&mode=edit`);await page.getByRole('button',{name:'Publish to Community',exact:true}).click();
   await page.getByLabel('Public display name',{exact:true}).fill('Community browser author');await page.getByLabel('Public handle',{exact:true}).fill('browser-author-'+Date.now());await page.getByRole('button',{name:'Save public profile'}).click();
   await page.getByLabel('Description',{exact:true}).fill('A real locally rendered design for publication verification.');
   await page.getByRole('button',{name:'Review public preflight'}).click();

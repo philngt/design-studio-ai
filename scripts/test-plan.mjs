@@ -45,6 +45,7 @@ const CORE_PATHS = [
 const DOCS_PATHS = [/^docs\//, /^README\.md$/, /^(AGENTS|CLAUDE)\.md$/, /^skills\//, /^LICENSE$/, /^plans\//];
 
 const AREAS = [
+  {name:'conversation',paths:[/^src\/app\/(studio-conversation|assistant-connection|use-agent-session|conversation)\./],specs:['onboarding-ui.spec.ts','coding-agents-ui.spec.ts','provider-settings.spec.ts','editor-ergonomics.spec.ts','sidebar-preview.spec.ts']},
   {name:'coding-agents',paths:[/^server\/agent/,/^src\/shared\/agent/,/^src\/app\/agent/,/^src\/app\/coding-agent/],specs:['coding-agents-ui.spec.ts']},
   {
     name: 'community',

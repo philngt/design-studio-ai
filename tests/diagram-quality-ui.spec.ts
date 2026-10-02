@@ -13,7 +13,7 @@ test('native diagram typography, hatching, inline editing, defaults and persiste
   expect((await page.request.post('/api/auth/register',{headers,data:{email:`diagram-${randomUUID()}@studio.test`,password:randomUUID()+randomUUID(),name:'Diagram quality'}})).status()).toBe(201);
   const response=await page.request.post('/api/projects',{headers,data:{kind:'web',name:'Diagram quality'}});expect(response.status()).toBe(201);
   const {project}=await response.json();
-  await page.goto(`/?project=${project.id}`);await page.getByRole('checkbox',{name:'Live',exact:true}).uncheck();
+  await page.goto(`/?project=${project.id}&mode=edit`);await page.getByRole('checkbox',{name:'Live',exact:true}).uncheck();
   await page.getByRole('button',{name:'Open creative board',exact:true}).click();
   await page.getByRole('button',{name:'diagram mode',exact:true}).click();
   await page.getByLabel('Diagram family',{exact:true}).selectOption('mind-map');

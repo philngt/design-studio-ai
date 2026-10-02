@@ -37,6 +37,7 @@ export const apiEndpoints = [
   { method: 'GET', path: '/api/projects/{id}/changes', summary: 'Read current revision and changes', body: undefined },
   { method: 'GET', path: '/api/projects/{id}/checks', summary: 'Inspect design', body: undefined },
   { method: 'GET', path: '/api/projects/{id}/brief', summary: 'Read design brief', body: undefined },
+  { method: 'GET', path: '/api/projects/{id}/brief/history', summary: 'Read committed brief snapshots; after is a revision cursor and nextAfter continues pagination', body: undefined },
   { method: 'PUT', path: '/api/projects/{id}/brief', summary: 'Update request, answers and scope', body: { expectedRevision: 0, request: 'Design a product landing page' } },
   { method: 'POST', path: '/api/projects/{id}/brief/approve', summary: 'Explicitly approve the reviewed scope', body: { expectedRevision: 1 } },
   { method: 'POST', path: '/api/projects/{id}/brief/interview', summary: 'Prepare interview using your provider', body: { expectedRevision: 1, provider: 'openai' } },
@@ -71,6 +72,7 @@ export function openApiDocument(schemas: Record<string, unknown>) {
   for (const endpoint of apiEndpoints) {
     const { method, path, summary, body } = endpoint;
     const parameters: unknown[] = [...path.matchAll(/\{(\w+)\}/g)].map(match => ({ name: match[1], in: 'path', required: true, schema: { type: 'string' } }));
+    if (path.endsWith('/brief/history')) parameters.push({name:'after',in:'query',schema:{type:'integer',minimum:0},description:'Brief revision cursor; continue with nextAfter until null'});
     if (path === '/api/fonts' || path.startsWith('/api/providers/')&&path.endsWith('/models')) parameters.push({ name: 'q', in: 'query', schema: { type: 'string', maxLength: 200 }, description: 'Case-insensitive catalog search' });
     if(path.includes('/agent-sessions/')&&path.endsWith('/events'))parameters.push({name:'after',in:'query',schema:{type:'integer',minimum:0}},{name:'stream',in:'query',schema:{type:'boolean'},description:'true returns SSE; Last-Event-ID overrides after on reconnect'},{name:'Last-Event-ID',in:'header',schema:{type:'integer',minimum:0}});
     if (method === 'GET' && path === '/api/design-systems/{id}') parameters.push({ name: 'version', in: 'query', schema: { type: 'integer', minimum: 1 }, description: 'Immutable version; latest when omitted' });

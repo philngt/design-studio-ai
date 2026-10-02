@@ -9,7 +9,7 @@ async function setup(page: Page, baseURL: string, document: DesignDocument) {
   const response = await page.request.post('/api/projects', { headers, data: { name: document.name, kind: document.kind, document } });
   expect(response.status()).toBe(201);
   const project = (await response.json() as { project: Project }).project;
-  await page.goto(`/?project=${project.id}`);
+  await page.goto(`/?project=${project.id}&mode=edit`);
   await expect(page.getByRole('button', { name: 'Back to workspace' })).toBeVisible();
   return project;
 }

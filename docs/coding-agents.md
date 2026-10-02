@@ -26,11 +26,13 @@ Compose persists CLI login/configuration in the separate `studio-agent-home` vol
 
 ## Human workflow
 
-Save pending canvas edits and explicitly approve any existing design brief. In the editor's chat pane, choose **Coding agent**, a provider and optionally a model, then send a request. The first-design brief also offers **Design with agent**. Sessions persist by project; reopening a session restores its activity and proposal. One turn or proposal action runs per project at a time.
+Projects open in **Chat** with a preview beside the conversation on desktop, or **Chat / Preview** tabs on smaller screens. Choose an API connection or coding agent in the same **AI** picker; Studio remembers the choice for this account on this browser. **Options** holds model overrides and connection management. Sessions are created or resumed automatically; **History** exposes session selection. One turn or proposal action runs per project at a time.
+
+For a prompt-driven project, answer one contextual question at a time in chat. Answers and brief revisions persist across reloads. Review and edit the scope card, then choose **Approve and create**. A coding agent's interview session can only read the brief and submit questions/scope. After human approval, Studio starts a separate design session in the same workspace. Reload never starts a paid turn. **Edit** opens the full editor without losing an unsent chat message; pending manual edits are saved explicitly with **Save and send**.
 
 Text streams incrementally. Studio-tool activity, input/permission requests, errors and usage reported by the provider appear in the same log. Unreported usage is unknown, not zero, and these events are not a complete provider billing ledger. **Stop agent** terminates the owned process, preserving any draft edits. A server restart marks in-flight sessions interrupted; it does not silently rerun a paid turn.
 
-Choose **Preview proposal on canvas**, inspect the pages, then **Apply proposal** or **Discard**. Tools never write the saved document, approve a brief, publish, export or mutate a Git repository. Apply uses the shared save service, checking the reviewed draft version, saved document revision, approved brief revision and asset ownership. An exact Apply retry returns the same save receipt. A manual edit or changed brief produces a conflict; review the latest saved design rather than increasing revision numbers to force stale content through. Discard resets the draft and native conversation handle to current saved state, including when the brief now needs approval again.
+Completed drafts appear in the preview automatically. Choose **View design** on smaller screens, inspect the pages, then **Apply proposal** or **Discard**. Tools never write the saved document, approve a brief, publish, export or mutate a Git repository. Apply uses the shared save service, checking the reviewed draft version, saved document revision, approved brief revision and asset ownership. An exact Apply retry returns the same save receipt. A manual edit or changed brief produces a conflict; review the latest saved design rather than increasing revision numbers to force stale content through. Discard resets the draft and native conversation handle to current saved state, including when the brief now needs approval again.
 
 ## Agent/API workflow
 
@@ -39,6 +41,9 @@ The [shared endpoint inventory](../src/shared/agent-endpoints.ts) and [schemas](
 ```sh
 dsa agents providers
 dsa agents models codex
+# Before approval, use a restricted interview session:
+dsa agents create PROJECT_ID --provider codex --purpose interview --revision OBSERVED_REVISION --brief-revision OBSERVED_BRIEF_REVISION
+# After explicit scope approval, create a design session (the default purpose):
 dsa agents create PROJECT_ID --provider codex --revision OBSERVED_REVISION
 dsa agents send PROJECT_ID SESSION_ID --file turn.json
 dsa agents events PROJECT_ID SESSION_ID --after LAST_SEQUENCE
@@ -51,7 +56,9 @@ dsa agents apply PROJECT_ID SESSION_ID --proposal-version REVIEWED_DRAFT_VERSION
 
 ## Security and runtime boundaries
 
-Each turn gets a private workspace and a random, turn-scoped authenticated loopback tool gateway. It exposes only `studio_context`, `studio_schema`, `studio_catalog`, `studio_edit`, `studio_replace` and `studio_inspect`. Draft schemas and owned assets are validated on the server; tools recheck Studio authorization, and the gateway is revoked when the turn ends. Child environments exclude Studio API keys, encryption keys and OAuth app secrets. Provider authentication must still be available to its native CLI.
+Each turn gets a private workspace and a random, turn-scoped authenticated loopback tool gateway. Design sessions expose only `studio_context`, `studio_schema`, `studio_catalog`, `studio_edit`, `studio_replace` and `studio_inspect`. Interview sessions expose only `studio_brief_context` and `studio_submit_interview`; both the gateway and server enforce that boundary. Interview creation and messages require the observed `expectedBriefRevision` as well as the document revision. An approved brief closes its interview session to further turns. Draft schemas and owned assets are validated on the server; tools recheck Studio authorization, and the gateway is revoked when the turn ends. Child environments exclude Studio API keys, encryption keys and OAuth app secrets. Provider authentication must still be available to its native CLI.
+
+`GET /api/projects/{id}/brief/history?after=REVISION`, MCP `get_design_brief_history`, WebMCP `studio_get_brief_history` (or the generated saved-state API tool), and `dsa brief history PROJECT_ID --after REVISION` return committed snapshots in ascending order. Continue with `nextAfter` until null. Existing projects receive their current snapshot during migration; earlier revisions are not reconstructed. History is owner-scoped and does not authorize approval or another model call.
 
 Claude uses its Agent SDK, Codex its app-server protocol, Copilot ACP, OpenCode its local HTTP/SSE SDK, and Pi RPC with a Studio-only extension. Pi explicitly enables only the Studio tool names and waits for `agent_settled`, not the earlier low-level `agent_end`, following its [RPC lifecycle](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/rpc.md) and [tool selection contract](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/src/cli/args.ts). Built-in write/shell tools are disabled or denied where the native protocol supports this; requests for unsupported capabilities are rejected. These controls are **not an operating-system sandbox or a credential-isolation guarantee for arbitrary CLI plugins/configuration**. Use trusted, pinned CLIs under a dedicated OS user/container, avoid unrelated extensions/global MCP servers, and expose this feature only to the designated trusted account. Native CLI sessions/config files may contain private prompts or provider credentials; keep their storage private.
 

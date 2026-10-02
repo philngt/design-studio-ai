@@ -55,5 +55,12 @@ test('coding-agent REST, MCP, CLI and compact WebMCP share real owner/session an
     assert.deepEqual(await cli('agents','apply',project.id,session.id,'--proposal-version',String(proposal.version)),applied);
     assert.equal((await mcp('agent_proposal',{id:project.id,sessionId:session.id})).proposal,null);
     assert.ok((await web('agent_events')).events.some((e:any)=>e.type==='proposal'));
+    await mcp('update_design_brief',{projectId:project.id,expectedRevision:0,request:'Make the next revision clearer'});
+    const history=await cli('brief','history',project.id,'--after','0');
+    assert.deepEqual(history,await mcp('get_design_brief_history',{projectId:project.id,after:0}));
+    assert.equal(history.history.length,1);assert.equal(history.nextAfter,null);
+    const browserHistory=await page.evaluate(async id=>(globalThis as any).tools.get('studio_api_get_projects_id_brief_history').execute({parameters:{id},query:{after:'0'}}),project.id);
+    assert.ok(!browserHistory.isError);assert.deepEqual(JSON.parse(browserHistory.content[0].text),history);
+    assert.deepEqual(await cli('brief','history',project.id,'--after','1'),{history:[],nextAfter:null});
   }finally{await browser?.close();if(server)await new Promise<void>(resolve=>server!.close(()=>resolve()));db.close();await rm(directory,{recursive:true,force:true});}
 });

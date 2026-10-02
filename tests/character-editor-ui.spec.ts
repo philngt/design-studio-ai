@@ -6,7 +6,7 @@ test('create rig, import real PNG, animate, compose, persist and export frames',
  doc.timeline={duration:2,fps:30,tracks:[]};
  const created=await page.request.post('/api/projects',{headers,data:{name:doc.name,kind:doc.kind,document:doc}});expect(created.status()).toBe(201);const project=(await created.json()).project;
  try{
- await page.goto(`/?project=${project.id}`);await expect(page.getByRole('button',{name:'Back to workspace'})).toBeVisible();
+ await page.goto(`/?project=${project.id}&mode=edit`);await expect(page.getByRole('button',{name:'Back to workspace'})).toBeVisible();
  if(['mobile','webkit'].includes(info.project.name))await page.locator('.mobile-editor-nav').getByRole('button',{name:'Canvas',exact:true}).click();
  await page.getByRole('checkbox',{name:'Live',exact:true}).uncheck();
  await page.getByRole('button',{name:'Character Motion',exact:true}).first().click();const dialog=page.getByRole('dialog');

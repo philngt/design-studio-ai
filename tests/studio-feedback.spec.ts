@@ -37,7 +37,9 @@ test('project, editor tabs, preview and component parameters survive navigation'
   const response = await page.request.post('/api/projects', { headers: { Origin: baseURL! }, data: { kind: doc.kind, name: doc.name, document: doc } });
   expect(response.status()).toBe(201); const { project } = await response.json();
   await page.goto('/'); await page.locator('.project-open').filter({ hasText: 'Feedback component' }).click();
-  await expect(page).toHaveURL(/project=/); await expect(page.locator('.editor-shell')).toBeVisible(); await page.getByRole('checkbox', { name: 'Live', exact: true }).uncheck();
+  await expect(page).toHaveURL(/project=/); await expect(page.locator('.editor-shell')).toBeVisible();
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Live', exact: true }).uncheck();
   await pane(page, 'Chat & layers'); await page.getByRole('button', { name: 'Assets', exact: true }).click();
   await page.locator('.component-catalog').getByRole('button', { name: 'Button', exact: true }).click();
   await pane(page, 'Design');
@@ -55,7 +57,7 @@ test('project, editor tabs, preview and component parameters survive navigation'
 test('motion space playback, collapsible panes, and real saved thumbnails', async ({ page, baseURL }, info) => {
   const doc = createDocument('video', 'Feedback motion'); doc.theme.fonts = { heading: 'Arial', body: 'Arial' };
   const response = await page.request.post('/api/projects', { headers: { Origin: baseURL! }, data: { kind: doc.kind, name: doc.name, document: doc } });
-  const { project } = await response.json(); await page.goto(`/?project=${project.id}`);
+  const { project } = await response.json(); await page.goto(`/?project=${project.id}&mode=edit`);
   await expect(page.locator('.canvas-viewport')).toBeVisible(); await page.locator('.canvas-viewport').focus();
   await page.keyboard.press('Space'); await expect(page.getByRole('button', { name: 'Pause timeline', exact: true })).toBeVisible();
   await page.keyboard.press('Space'); await expect(page.getByRole('button', { name: 'Play timeline', exact: true })).toBeVisible();
@@ -80,7 +82,7 @@ test('motion space playback, collapsible panes, and real saved thumbnails', asyn
 test('3D materials and 2D layers remain editable and ordered', async ({ page, baseURL }, testInfo) => {
   const doc = createDocument('3d', 'Feedback scene'); doc.theme.fonts = { heading: 'Arial', body: 'Arial' };
   const response = await page.request.post('/api/projects', { headers: { Origin: baseURL! }, data: { kind: doc.kind, name: doc.name, document: doc } });
-  const { project } = await response.json(); await page.goto(`/?project=${project.id}`);
+  const { project } = await response.json(); await page.goto(`/?project=${project.id}&mode=edit`);
   await expect(page.locator('[data-scene-layer="3d"]')).toBeVisible(); await page.getByRole('checkbox', { name: 'Live', exact: true }).uncheck();
   expect(await page.locator('.scene-view > [data-scene-layer]').evaluateAll(nodes => nodes.map(n => n.getAttribute('data-scene-layer')))).toEqual(['2d', '3d', '2d']);
   await pane(page, 'Chat & layers'); await page.getByRole('button', { name: 'Layers', exact: true }).click();
@@ -131,7 +133,7 @@ test('3D picking follows composited layer order instead of camera distance', asy
   ];
   doc.pages[0].scene = { camera: { position: [0, 0, 8], target: [0, 0, 0], fov: 45 }, ambient: 1, light: { color: '#ffffff', position: [3, 5, 5], intensity: 2 } };
   const response = await page.request.post('/api/projects', { headers: { Origin: baseURL! }, data: { kind: doc.kind, name: doc.name, document: doc } });
-  expect(response.status()).toBe(201); const { project } = await response.json(); await page.goto(`/?project=${project.id}`);
+  expect(response.status()).toBe(201); const { project } = await response.json(); await page.goto(`/?project=${project.id}&mode=edit`);
   const surface = page.locator('.scene-view canvas:not([data-scene-layer])'); await expect(surface).toBeVisible();
   await surface.click(); await pane(page, 'Chat & layers'); await page.getByRole('button', { name: 'Layers', exact: true }).click();
   await expect(page.locator('.layer-name').filter({ hasText: 'Front layer' })).toHaveAttribute('aria-pressed', 'true');

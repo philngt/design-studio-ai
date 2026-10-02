@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { documentSchema, type DesignDocument } from './schema';
 import { operationsSchema, operationSchema } from './operations';
+import { interviewSchema } from './brief';
 
 export const agentProviders = [
   { id: 'claude', name: 'Claude Code' }, { id: 'codex', name: 'Codex' },
@@ -8,8 +9,10 @@ export const agentProviders = [
 ] as const;
 export const agentProviderSchema = z.enum(['claude', 'codex', 'copilot', 'opencode', 'pi']);
 export type AgentProvider = z.infer<typeof agentProviderSchema>;
-export const agentCreateSchema = z.object({ provider: agentProviderSchema, model: z.string().trim().min(1).max(200).optional(), expectedRevision: z.number().int().positive() }).strict();
-export const agentMessageSchema = z.object({ requestId: z.string().uuid(), prompt: z.string().trim().min(1).max(12000), expectedRevision: z.number().int().positive() }).strict();
+export const agentPurposeSchema = z.enum(['interview', 'design']);
+export type AgentPurpose = z.infer<typeof agentPurposeSchema>;
+export const agentCreateSchema = z.object({ provider: agentProviderSchema, model: z.string().trim().min(1).max(200).optional(), expectedRevision: z.number().int().positive(), purpose: agentPurposeSchema.default('design'), expectedBriefRevision: z.number().int().nonnegative().optional() }).strict();
+export const agentMessageSchema = z.object({ requestId: z.string().uuid(), prompt: z.string().trim().min(1).max(12000), expectedRevision: z.number().int().positive(), expectedBriefRevision: z.number().int().nonnegative().optional() }).strict();
 export const agentPermissionSchema = z.object({ requestId: z.string().min(1).max(200), decision: z.enum(['allow', 'deny']), answer: z.string().max(12000).optional() }).strict();
 export const agentProposalActionSchema = z.object({ proposalVersion: z.number().int().nonnegative() }).strict();
 export function agentSchemas() {
@@ -19,10 +22,12 @@ export type AgentStatus = 'idle' | 'running' | 'waiting_permission' | 'stopping'
 export interface AgentProviderInfo { id: AgentProvider; name: string; installed: boolean; version?: string; authentication: 'unknown'; models: string[]; diagnostic?: string }
 export interface AgentCatalog { enabled: boolean; reason?: string; providers: AgentProviderInfo[] }
 export interface AgentProposal { document: DesignDocument; version: number; baseRevision: number; baseBriefRevision: number }
-export interface AgentSession { id: string; projectId: string; provider: AgentProvider; model: string | null; status: AgentStatus; createdAt: string; updatedAt: string; proposal: AgentProposal | null }
-export interface AgentEvent { seq: number; sessionId: string; type: 'user' | 'text' | 'tool' | 'tool_result' | 'permission' | 'permission_resolved' | 'usage' | 'status' | 'error' | 'proposal'; data: Record<string, unknown>; createdAt: string }
+export interface AgentSession { id: string; projectId: string; provider: AgentProvider; model: string | null; purpose?: AgentPurpose; baseRevision?: number; baseBriefRevision?: number; status: AgentStatus; createdAt: string; updatedAt: string; proposal: AgentProposal | null }
+export interface AgentEvent { seq: number; sessionId: string; type: 'user' | 'text' | 'tool' | 'tool_result' | 'permission' | 'permission_resolved' | 'usage' | 'status' | 'error' | 'proposal' | 'brief'; data: Record<string, unknown>; createdAt: string }
 export type AgentEmission = Pick<AgentEvent, 'type' | 'data'>;
 export const agentTools = {
+  studio_brief_context: { description: 'Read the saved brief, its revision and project context. Ask concise questions; never invent user answers or approval.', schema: z.object({}).strict() },
+  studio_submit_interview: { description: 'Save validated interview questions or a proposed scope at the observed brief revision. This cannot approve a brief or change the design.', schema: z.object({ expectedRevision: z.number().int().nonnegative(), interview: interviewSchema }).strict() },
   studio_context: { description: 'Read this session’s draft, saved design revision and approved brief. All writes affect only the draft.', schema: z.object({}).strict() },
   studio_schema: { description: 'Read the canonical document schema and operation names. Pass operation to discover one complete operation schema.', schema: z.object({operation:z.string().optional()}).strict() },
   studio_catalog: { description: 'Read Studio templates, themes and blocks.', schema: z.object({}).strict() },
@@ -39,4 +44,7 @@ export const agentToolRegistrationSchemas={
   studio_replace:z.object({version:z.number().int().nonnegative(),document:z.object({}).loose().describe('Canonical document. Discover studio_schema first.')}).strict(),
 };
 export type AgentToolName = keyof typeof agentTools;
+export function agentToolNames(purpose: AgentPurpose = 'design'): AgentToolName[] {
+  return (Object.keys(agentTools) as AgentToolName[]).filter(name => purpose === 'interview' ? name === 'studio_brief_context' || name === 'studio_submit_interview' : name !== 'studio_brief_context' && name !== 'studio_submit_interview');
+}
 export const agentSessionPath = (projectId: string, sessionId?: string) => `/api/projects/${encodeURIComponent(projectId)}/agent-sessions${sessionId ? `/${encodeURIComponent(sessionId)}` : ''}`;

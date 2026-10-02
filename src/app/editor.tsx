@@ -1,5 +1,6 @@
 import {OperationStatus} from './operation-status';
-import { AgentPanel } from './agent-panel';
+import { z } from 'zod';
+import { StudioConversation } from './studio-conversation';
 import { agentSessionPath } from '../shared/agents';
 import {AssetReplacement} from './asset-replacement';
 import {TimelineAudioPlayer} from './timeline-audio-player';
@@ -115,7 +116,6 @@ import { Brand, Busy, Field, Modal } from "./ui";
 import { Inspector } from "./inspector";
 import { ThemeToggle } from "./theme-toggle";
 import { navigateButtonGroup } from "./keyboard-navigation";
-import { DesignBriefWorkspace } from "./design-brief";
 import type { DesignBrief } from "../shared/brief";
 import { inspectDesign } from "../shared/design-checks";
 
@@ -126,7 +126,6 @@ const SceneView = lazy(() =>
   import("./scene-view").then((module) => ({ default: module.SceneView })),
 );
 
-type ChatMessage = { id?: string; role: "user" | "assistant"; text: string };
 type Asset = DesignDocument["assets"][number];
 type ToolContext = {
   registerTool: (tool: {
@@ -165,13 +164,7 @@ export function Editor({
   const communityEnabled = useCommunityEnabled();
   const [brief, setBrief] = useState<DesignBrief | null>(null),
     [briefLoaded, setBriefLoaded] = useState(false),
-    [briefManual, setBriefManual] = useState(false),
     [briefError, setBriefError] = useState("");
-  const briefProposal = useRef<{
-    document: DesignDocument;
-    briefRevision: number;
-    projectRevision: number;
-  } | null>(null);
   async function loadBrief() {
     setBriefError("");
     try {
@@ -188,12 +181,6 @@ export function Editor({
           )
         ).brief;
       setBrief(next);
-      setBriefManual(
-        Boolean(
-          screenParam('brief') === 'editor' || (screenParam('brief') !== 'open' && next?.status === "approved" &&
-          initial.document.pages.some((p) => p.nodes.length)),
-        ),
-      );
       setBriefLoaded(true);
     } catch (e) {
       setBriefError(message(e));
@@ -202,86 +189,6 @@ export function Editor({
   useEffect(() => {
     void loadBrief();
   }, [initial.id]);
-  useEffect(() => { const restore = () => { if (screenParam('brief') === 'open') setBriefManual(false); if (screenParam('brief') === 'editor') setBriefManual(true); }; window.addEventListener('popstate', restore); return () => window.removeEventListener('popstate', restore); }, []);
-  async function buildFromBrief(
-    approvedBrief: DesignBrief,
-    selectedProvider: string,
-    selectedModel: string,
-  ) {
-    if (approvedBrief.status !== "approved" || !approvedBrief.scope)
-      throw new Error("Approve the design scope before generating.");
-    if (dirty)
-      throw new Error(
-        "Save your manual canvas edits before building from this scope.",
-      );
-    const latest = (
-      await api<{ brief: DesignBrief }>(
-        `/api/projects/${projectRef.current.id}/brief`,
-      )
-    ).brief;
-    if (
-      latest.revision !== approvedBrief.revision ||
-      latest.status !== "approved"
-    )
-      throw new Error(
-        "The brief changed. Reload it and approve the latest scope before building.",
-      );
-    let pending = briefProposal.current;
-    if (!pending || pending.briefRevision !== approvedBrief.revision) {
-      const response = await post<{ document: DesignDocument }>(
-        `/api/projects/${projectRef.current.id}/generate`,
-        {
-          prompt:
-            "Build the design from this approved scope.\n" +
-            JSON.stringify({
-              request: approvedBrief.request,
-              answers: approvedBrief.answers,
-              scope: approvedBrief.scope,
-            }),
-          provider: selectedProvider,
-          ...(selectedModel.trim() ? { model: selectedModel.trim() } : {}),
-          expectedRevision: projectRef.current.revision,
-        },
-      );
-      const generated = documentSchema.parse(response.document);
-      if (
-        generated.id !== projectRef.current.id ||
-        generated.kind !== projectRef.current.kind
-      )
-        throw new Error(
-          "The generated design changed the project identity or format. Retry with your provider.",
-        );
-      pending = {
-        document: generated,
-        briefRevision: approvedBrief.revision,
-        projectRevision: projectRef.current.revision,
-      };
-      briefProposal.current = pending;
-      setAgentProposal(null);setProposal(generated);setProposalGuard({baseRevision:pending.projectRevision,baseBriefRevision:pending.briefRevision});
-    }
-    const { project: next } = await saveDocument<{ project: Project }>(
-      `/api/projects/${projectRef.current.id}/document`,
-      { document: pending.document, expectedRevision: pending.projectRevision, expectedBriefRevision: pending.briefRevision },
-    );
-    remember();
-    projectRef.current = next;
-    docRef.current = next.document;
-    setProject(next);
-    setDoc(next.document);
-    setSaved(documentFingerprint(next.document));
-    onProject(next);
-    setProposal(null);
-    briefProposal.current = null;
-    setPageIndex(0);
-    setSelected(null);
-    setPrompt("");
-    setBriefManual(true);
-    notify("Your first design is ready and saved.");
-    void appendChat(
-      "assistant",
-      "Created and saved the first design from your approved scope.",
-    ).catch((e) => setError(message(e)));
-  }
   const [project, setProject] = useState(initial),
     [doc, setDoc] = useState<DesignDocument>(() => clone(initial.document));
   const [saved, setSaved] = useState(() => documentFingerprint(initial.document)),
@@ -294,14 +201,11 @@ export function Editor({
     setDirectText(null);
     setSelection(previous => additive ? toggleSelection(previous, id) : [id]);
   }
+  // A dedicated Board is an explicit manual drawing entry point, not an AI interview.
+  const startsInEditor = screenParam('mode') === 'edit' || (!screenParam('mode') && initial.document.pages.length === 1 && initial.document.pages[0].name === 'Board' && initial.document.pages[0].nodes.some(node => node.type === 'board'));
   const [panel, setPanel] = useScreenState("panel", "chat", ["chat", "layers", "assets"]),
-    [mobilePanel, setMobilePanel] = useScreenState("pane", "canvas", ["canvas", "chat", "inspector"]),
-    [prompt, setPrompt] = useState(initial.description || "");
-  const [chat, setChat] = useState<ChatMessage[]>([]),
-    [chatLoaded, setChatLoaded] = useState(false),
-    [providers, setProviders] = useState<Provider[]>([]),
-    [provider, setProvider] = useState("openai"),
-    [model, setModel] = useState("");
+    [mobilePanel, setMobilePanel] = useScreenState("pane", startsInEditor ? 'canvas' : 'chat', ["canvas", "chat", "inspector"]);
+  const [providers, setProviders] = useState<Provider[]>([]);
   const [busy, setBusy] = useState(""),
     [error, setError] = useState(""),
     [proposal, setProposal] = useState<DesignDocument | null>(null),
@@ -314,8 +218,6 @@ export function Editor({
   const [characterOpen,setCharacterOpen]=useState(false);
   const [frameStart,setFrameStart]=useState(0),[frameEnd,setFrameEnd]=useState(2),[frameFps,setFrameFps]=useState(12);
   const [proposalGuard,setProposalGuard]=useState<{baseRevision:number;baseBriefRevision:number}|null>(null);
-  const [generationMode,setGenerationMode]=useScreenState<'api'|'agent'>('assistant','api',['api','agent']);
-  const [agentInitialPrompt,setAgentInitialPrompt]=useState('');
   const [agentProposal,setAgentProposal]=useState<{sessionId:string;version:number}|null>(null);
   const [agentRefreshKey,setAgentRefreshKey]=useState(0);
   const designChecks = showChecks ? inspectDesign(doc) : null;
@@ -324,8 +226,16 @@ export function Editor({
   const syncing = useRef(false);
   const syncBlocked = useRef(false);
 
-  const [screenMode, setScreenMode] = useScreenState("mode", "edit", ["edit", "preview", "present"]);
-  const presenting = screenMode === 'present', preview = screenMode === 'preview';
+  const [screenMode, setScreenMode] = useScreenState("mode", startsInEditor ? 'edit' : 'chat', ["chat", "edit", "preview", "present"], true);
+  const conversationMode = screenMode === 'chat';
+  const presenting = screenMode === 'present', preview = screenMode === 'preview' || conversationMode;
+  const [showConversationScope, setShowConversationScope] = useState(screenParam('brief') === 'open');
+  const [assistantRunning, setAssistantRunning] = useState(false);
+  useEffect(() => {
+    if (!screenParam('mode') && (['layers','assets'].includes(screenParam('panel')) || screenParam('pane') === 'inspector' || !!screenParam('inspector') || screenParam('brief') === 'editor')) writeScreen({mode:'edit'},true);
+    const restore = () => { if (screenParam('brief') === 'open') { writeScreen({mode:'chat',pane:'chat'},true); setShowConversationScope(true); } };
+    window.addEventListener('popstate', restore); return () => window.removeEventListener('popstate', restore);
+  }, []);
   const setPresenting = (value: boolean) => setScreenMode(value ? 'present' : 'edit');
   const setPreview = (value: boolean) => setScreenMode(value ? 'preview' : 'edit');
   const [editLeftPane, setEditLeftPane] = useScreenState('left', 'open', ['open', 'closed']);
@@ -404,7 +314,7 @@ export function Editor({
     if (restoreFocus) viewport.current?.focus({ preventScroll: true });
     return true;
   }
-  const viewportReady = (briefLoaded || !!briefError) && (!brief || briefManual);
+  const viewportReady = briefLoaded || !!briefError;
   const { pan, resetPan } = useCanvasGestures(viewport, scale, setZoom, displayed.kind === '3d', viewportReady, () => { drag.current = null; }, !doc.timeline);
   useEffect(() => {
     let active = true;
@@ -429,7 +339,7 @@ export function Editor({
   const paintGeneration = useRef(0);
   if (doc.schemaVersion === 2) for (const painting of doc.paintings) paintGeneration.current = Math.max(paintGeneration.current, painting.generation);
   creativeOpen.current = !!creativeBoardId || !!creativePaintingId;
-  syncBlocked.current = !!busy || !!proposal || !!directText || creativeOpen.current;
+  syncBlocked.current = !!busy || assistantRunning || !!proposal || !!directText || creativeOpen.current;
   const change = useCallback((recipe: (doc: DesignDocument) => void) => {
     try {
       const next = clone(docRef.current);
@@ -590,44 +500,13 @@ export function Editor({
         if (!active) return;
         setProviders(result.providers);
         setMediaProvider(current => isCustomProvider(current) && !result.providers.some(p => p.provider === current) ? 'openai' : current);
-        setProvider(current => result.providers.some(p => p.provider === current && isTextProvider(p.provider)) ? current : result.providers.find(p => isTextProvider(p.provider))?.provider ?? 'openai');
       }).catch(e => { if (active) setError(message(e)); });
     void load();
     window.addEventListener('studio-providers-updated', load);
     return () => { active = false; window.removeEventListener('studio-providers-updated', load); };
   }, []);
-  useEffect(() => {
-    let active = true;
-    api<{ messages: ChatMessage[] }>(`/api/projects/${project.id}/messages`)
-      .then((result) => {
-        if (active)
-          setChat((current) => (current.length ? current : result.messages));
-      })
-      .catch((e) => {
-        if (active)
-          setError(`Conversation history could not load. ${message(e)}`);
-      })
-      .finally(() => {
-        if (active) setChatLoaded(true);
-      });
-    return () => {
-      active = false;
-    };
-  }, [project.id]);
-  useEffect(() => { setModel(''); }, [provider]);
   useEffect(() => { setMediaModel(''); setSourceAsset(''); }, [mediaProvider]);
 
-  async function appendChat(role: ChatMessage["role"], text: string) {
-    const optimisticId = uid();
-    setChat((current) => [...current, { id: optimisticId, role, text }]);
-    const result = await post<{ message: ChatMessage }>(
-      `/api/projects/${project.id}/messages`,
-      { role, text },
-    );
-    setChat((current) =>
-      current.map((item) => (item.id === optimisticId ? result.message : item)),
-    );
-  }
   useEffect(() => {
     if (!viewport.current) return;
     const fit = () => {
@@ -802,7 +681,7 @@ export function Editor({
       }
       if (event.key === "Escape") {
         setSelected(null);
-        setPreview(false);
+        if (!conversationMode) setPreview(false);
         return;
       }
       if (busy || preview || proposal || event.altKey) return;
@@ -849,7 +728,7 @@ export function Editor({
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [node, selection, pageIndex, busy, preview, proposal, directText, time, doc.timeline]);
+  }, [node, selection, pageIndex, busy, preview, conversationMode, proposal, directText, time, doc.timeline]);
   useEffect(() => {
     const leave = (event: Event) => { if (dirty && !window.confirm('Leave this design without saving your changes?')) event.preventDefault(); };
     window.addEventListener('studio:leave-project', leave);
@@ -913,62 +792,6 @@ export function Editor({
       else setNodePatch(next, target, transformNode(interpolateNode(target, next, time), delta.x, delta.y, active.resize, event.shiftKey));
     }
     docRef.current = next; setDoc(next);
-  }
-  async function generate() {
-    if (!prompt.trim() || busy) return;
-    if (!briefLoaded || (brief && brief.status !== "approved")) {
-      setError(
-        "Complete and approve the design brief before AI generation. You can keep editing the canvas manually.",
-      );
-      if (brief) setBriefManual(false);
-      return;
-    }
-    if (dirty) {
-      setError(
-        "Save your edits before generating so the provider works from the latest design.",
-      );
-      return;
-    }
-    const request = prompt;
-    setBusy("Generating");
-    setError("");
-    try {
-      await appendChat("user", request);
-      const result = await post<{ document: DesignDocument; baseRevision:number;baseBriefRevision:number }>(
-        `/api/projects/${project.id}/generate`,
-        {
-          prompt: request,
-          provider,
-          ...(model ? { model } : {}),
-          expectedRevision: project.revision,
-        },
-      );
-      setAgentProposal(null);setProposal(result.document);setProposalGuard({baseRevision:result.baseRevision,baseBriefRevision:result.baseBriefRevision});
-      setPageIndex(0);
-      setPrompt("");
-      await appendChat(
-        "assistant",
-        "Your proposal is ready in the canvas. Review the pages, then apply it or keep your current design.",
-      ).catch((e) =>
-        setError(
-          `Your proposal is ready, but its conversation entry could not be saved. ${message(e)}`,
-        ),
-      );
-    } catch (e) {
-      setError(message(e));
-      try {
-        await appendChat(
-          "assistant",
-          `Generation could not finish. ${message(e)} Your current design is unchanged.`,
-        );
-      } catch (historyError) {
-        setError(
-          `${message(e)} Conversation could not be saved: ${message(historyError)}`,
-        );
-      }
-    } finally {
-      setBusy("");
-    }
   }
   async function addAsset(asset: Asset) {
     change((d) => {
@@ -1217,6 +1040,7 @@ export function Editor({
       "studio_save_design",
       "studio_set_design",
       "studio_get_brief",
+      "studio_get_brief_history",
       "studio_update_brief",
       "studio_approve_brief",
       "studio_inspect_design",
@@ -1377,6 +1201,13 @@ export function Editor({
           result(await api(`/api/projects/${projectRef.current.id}/brief`)),
       });
       context.registerTool({
+        name: 'studio_get_brief_history',
+        description: 'Read committed brief snapshots after a revision; nextAfter continues pagination.',
+        annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+        inputSchema: { type: 'object', properties: { after: { type: 'integer', minimum: 0 } } },
+        execute: async ({ after }) => result(await api(`/api/projects/${projectRef.current.id}/brief/history?after=${z.coerce.number().int().nonnegative().parse(after ?? 0)}`)),
+      });
+      context.registerTool({
         name: "studio_update_brief",
         description:
           "Persist request, interview, answers or scope for the open project. Requires the brief expectedRevision (0 creates). Every update invalidates scope approval. Use only known question IDs; use a string for custom answers.",
@@ -1404,7 +1235,6 @@ export function Editor({
             args,
           );
           setBrief(response.brief);
-          setBriefManual(false);
           setBriefLoaded(true);
           return result(response);
         },
@@ -1431,7 +1261,6 @@ export function Editor({
             args,
           );
           setBrief(response.brief);
-          setBriefManual(false);
           return result(response);
         },
       });
@@ -1574,20 +1403,6 @@ export function Editor({
       </div>
     );
   }
-  if (brief && !briefManual)
-    return (
-      <DesignBriefWorkspace
-        projectId={project.id}
-        projectName={project.name}
-        brief={brief}
-        onBrief={setBrief}
-        onBack={onBack}
-        onManual={() => { setBriefManual(true); writeScreen({ brief: "editor" }); }}
-        onSettings={onSettings}
-        onGenerate={buildFromBrief}
-        onAgentGenerate={() => { setGenerationMode('agent');setAgentInitialPrompt('Create the design from the approved brief.');setBriefManual(true);setPanel('chat');setMobilePanel('chat');writeScreen({brief:'editor',panel:'chat',pane:'chat'}); }}
-      />
-    );
   if (!briefLoaded && !briefError)
     return (
       <div className="loading-workspace">
@@ -1596,7 +1411,7 @@ export function Editor({
     );
   return (
     <div
-      className={`editor-shell ${preview ? "preview-mode" : ""} left-${leftPane} right-${rightPane} mobile-${mobilePanel}`}
+      className={`editor-shell ${conversationMode ? 'conversation-mode' : ''} ${preview ? "preview-mode" : ""} left-${conversationMode ? 'open' : leftPane} right-${conversationMode ? 'closed' : rightPane} mobile-${mobilePanel}`}
     >
       <header className="editor-header">
         <div className="editor-heading">
@@ -1632,6 +1447,15 @@ export function Editor({
           </div>
         </div>
         <div className="editor-header-actions">
+          <button className={`button small workspace-primary-action ${conversationMode ? 'selected' : ''}`} aria-pressed={conversationMode} onClick={() => writeScreen({mode:'chat',pane:'chat',brief:null})}>Chat</button>
+          <details className="workspace-more"><summary className="button small">More</summary><div>
+            <ThemeToggle />
+            <OperationStatus projectId={project.id}/>
+            <button className="button small" disabled={!!busy || assistantRunning || !!proposal} onClick={() => void publish()}><Share2 size={15}/> Share</button>
+            <button className="button small" onClick={() => setShowChecks(true)}>Design checks</button>
+            {brief && <button className="button small" onClick={() => { writeScreen({mode:'chat',pane:'chat',brief:'open'}); setShowConversationScope(true); }}>Review design brief</button>}
+            <button className="button small" onClick={onSettings}>AI connections</button>
+          </div></details>
           <ThemeToggle />
           <button
             className="icon-button"
@@ -1652,14 +1476,14 @@ export function Editor({
             <Redo2 size={18} />
           </button>
           <OperationStatus projectId={project.id}/>
-          {communityEnabled && <button className="button small" aria-label="Publish to Community" disabled={!!busy} onClick={() => void (async () => {
+          {communityEnabled && <button className="button small" aria-label="Publish to Community" disabled={!!busy || assistantRunning || !!proposal} onClick={() => void (async () => {
             if (syncUncertain.current) { setError('Reload the project to reconcile the timed-out save before Community publication.'); return; }
             if (documentFingerprint(docRef.current) !== documentFingerprint(projectRef.current.document)) await save();
             if (syncUncertain.current || documentFingerprint(docRef.current) !== documentFingerprint(projectRef.current.document)) { setError('Save and reconcile all current edits before reviewing Community publication.'); return; }
             setCommunityPublish(projectRef.current);
           })()}>Publish to Community</button>}
           <span className="toolbar-divider" />
-          <button className={`button small ${!preview ? "selected" : ""}`} aria-pressed={!preview} onClick={() => setPreview(false)}><Pencil size={15}/> Edit</button>
+          <button className={`button small workspace-primary-action ${!preview ? "selected" : ""}`} aria-pressed={!preview} disabled={assistantRunning || !!proposal} title={proposal ? 'Apply or discard the draft before editing.' : undefined} onClick={() => writeScreen({mode:'edit',pane:conversationMode ? 'canvas' : mobilePanel,brief:null})}><Pencil size={15}/> Edit</button>
           <button
             className={`button small preview-button ${preview ? "selected" : ""}`}
             aria-pressed={preview}
@@ -1668,10 +1492,11 @@ export function Editor({
             <Play size={15}/> Preview
           </button>
           <button
-            className="button small export-button"
+            className="button small export-button workspace-primary-action"
             aria-label="Export"
+            title={proposal ? 'Apply or discard the draft before exporting.' : undefined}
             onClick={() => setExportOpen(true)}
-            disabled={!!busy}
+            disabled={!!busy || assistantRunning || !!proposal}
           >
             <Download size={15} />
             <span>Export</span>
@@ -1680,13 +1505,13 @@ export function Editor({
             className="button small share-button"
             aria-label="Share"
             onClick={() => void publish()}
-            disabled={!!busy}
+            disabled={!!busy || assistantRunning || !!proposal}
           >
             <Share2 size={15} />
             <span>Share</span>
           </button>
           <button
-            className="button primary small"
+            className={`button primary small ${dirty ? 'workspace-primary-action' : ''}`}
             aria-label="Save"
             onClick={() => void save()}
             disabled={!!busy || !dirty}
@@ -1696,8 +1521,8 @@ export function Editor({
           </button>
         </div>
       </header>
-      {brief && (
-        <button className="brief-return" onClick={() => { setBriefManual(false); writeScreen({ brief: "open" }); }}>
+      {brief && !conversationMode && (
+        <button className="brief-return" onClick={() => { writeScreen({mode:'chat',pane:'chat',brief:'open'}); setShowConversationScope(true); }}>
           <Sparkles size={14} />
           {brief.status === "approved"
             ? "View approved scope"
@@ -1722,26 +1547,26 @@ export function Editor({
           aria-pressed={mobilePanel === "chat"}
           onClick={() => setMobilePanel("chat")}
         >
-          <MessageSquare size={16} /> Chat & layers
+          <MessageSquare size={16} /> {conversationMode ? 'Chat' : 'Chat & layers'}
         </button>
         <button
           className={mobilePanel === "canvas" ? "active" : ""}
           aria-pressed={mobilePanel === "canvas"}
           onClick={() => setMobilePanel("canvas")}
         >
-          <Monitor size={16} /> Canvas
+          <Monitor size={16} /> {conversationMode ? 'Preview' : 'Canvas'}
         </button>
-        <button
+        {!conversationMode && <button
           className={mobilePanel === "inspector" ? "active" : ""}
           aria-pressed={mobilePanel === "inspector"}
           onClick={() => setMobilePanel("inspector")}
         >
           <SlidersHorizontal size={16} /> Design
-        </button>
+        </button>}
       </div>
       <div className="pane-controls"><button className="icon-button" aria-label={leftPane === 'open' ? 'Collapse left sidebar' : 'Expand left sidebar'} aria-expanded={leftPane === 'open'} onClick={() => setLeftPane(leftPane === 'open' ? 'closed' : 'open')}>{leftPane === 'open' ? <PanelLeftClose size={17}/> : <PanelLeftOpen size={17}/>}</button><span>Workspace</span><button className="icon-button" aria-label={rightPane === 'open' ? 'Collapse properties' : 'Expand properties'} aria-expanded={rightPane === 'open'} onClick={() => setRightPane(rightPane === 'open' ? 'closed' : 'open')}>{rightPane === 'open' ? <PanelRightClose size={17}/> : <PanelRightOpen size={17}/>}</button></div><div className="editor-workspace">
         <aside className="left-panel">
-          <div
+          {!conversationMode && <div
             className="panel-tabs"
             onKeyDown={(event) => navigateButtonGroup(event)}
           >
@@ -1766,101 +1591,18 @@ export function Editor({
             >
               Assets
             </button>
+          </div>}
+          <div className="conversation-container" hidden={!conversationMode && panel !== 'chat'}>
+            <StudioConversation accountId={accountId} project={project} brief={brief} startRequested={!!initialBriefRequest}
+              onBrief={next => { setBrief(next); if (next.status !== 'approved') { setProposal(null); setProposalGuard(null); setAgentProposal(null); } }}
+              reloadBrief={loadBrief} dirty={dirty} onSave={async () => { await save(); if (syncUncertain.current || documentFingerprint(docRef.current) !== documentFingerprint(projectRef.current.document)) throw new Error('Save and reconcile your canvas changes before continuing.'); return projectRef.current; }}
+              onSettings={onSettings} refreshKey={agentRefreshKey} proposalReady={!!proposal}
+              onProposal={next => { setAgentProposal(null); setProposal(next.document); setProposalGuard({baseRevision:next.baseRevision,baseBriefRevision:next.baseBriefRevision}); setPageIndex(0); }}
+              onAgentProposal={(next,sessionId) => { setProposal(next.document); setProposalGuard({baseRevision:next.baseRevision,baseBriefRevision:next.baseBriefRevision}); setAgentProposal({sessionId,version:next.version}); setPageIndex(0); }}
+              onOpenPreview={() => setMobilePanel('canvas')} showScope={showConversationScope} onScopeShown={() => setShowConversationScope(false)} onRunning={setAssistantRunning}
+            />
           </div>
-          {panel === "chat" ? (
-            <>
-              <div className="generation-mode" role="group" aria-label="Design assistant mode"><button className="button small" aria-pressed={generationMode==='api'} onClick={()=>setGenerationMode('api')}>API provider</button><button className="button small" aria-pressed={generationMode==='agent'} onClick={()=>setGenerationMode('agent')}>Coding agent</button></div>
-              {generationMode==='agent'?<AgentPanel projectId={project.id} revision={project.revision} refreshKey={agentRefreshKey} initialPrompt={agentInitialPrompt} blocked={dirty?'Save your canvas edits before using an agent.':!briefLoaded||brief&&brief.status!=='approved'?'Approve the design brief before using an agent.':undefined} onPreview={(next,sessionId)=>{setProposal(next.document);setProposalGuard({baseRevision:next.baseRevision,baseBriefRevision:next.baseBriefRevision});setAgentProposal({sessionId,version:next.version});setPageIndex(0);setMobilePanel('canvas');}}/>:<>
-              <div className="chat-history">
-                <div className="studio-greeting">
-                  <Brand compact />
-                  <h2>Let's make it yours.</h2>
-                  <p>
-                    Describe a change, explore a direction, or select something
-                    on the canvas to fine-tune it.
-                  </p>
-                </div>
-                {chat.length === 0 && (
-                  <div className="chat-suggestions">
-                    {[
-                      "Make the layout more editorial",
-                      "Rewrite the copy for my audience",
-                      "Add a clear call to action",
-                    ].map((text) => (
-                      <button key={text} onClick={() => setPrompt(text)}>
-                        {text}
-                        <ArrowUp size={14} />
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {chat.map((item, i) => (
-                  <div className={`chat-message ${item.role}`} key={i}>
-                    {item.role === "assistant" && (
-                      <span className="chat-author">
-                        <Sparkles size={13} /> Studio
-                      </span>
-                    )}
-                    <p>{item.text}</p>
-                  </div>
-                ))}
-                {busy === "Generating" && (
-                  <div className="generation-progress">
-                    <Busy label="Shaping your design…" />
-                    <p>
-                      Your provider is preparing a proposal. Your saved design
-                      stays safe.
-                    </p>
-                  </div>
-                )}
-              </div>
-              <div className="chat-compose">
-                <textarea
-                  aria-label="Message to AI designer"
-                  placeholder="Describe what you'd like to change…"
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                />
-                <div className="chat-compose-footer">
-                  <select
-                    aria-label="Generation provider"
-                    value={provider}
-                    onChange={(e) => { setProvider(e.target.value); setModel(''); }}
-                  >
-                    {builtInProviders.filter(p => isTextProvider(p.id)).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                    {providers.filter(p => isCustomProvider(p.provider)).map(p => <option key={p.provider} value={p.provider}>{p.name ?? p.provider}</option>)}
-                  </select>
-                  <button
-                    className="send-button"
-                    title="Generate proposal"
-                    aria-label="Generate proposal"
-                    disabled={!!busy || !chatLoaded || !prompt.trim()}
-                    onClick={() => void generate()}
-                  >
-                    <ArrowUp size={18} />
-                  </button>
-                </div>
-                <details className="model-override">
-                  <summary>Model options</summary>
-                  <ModelPicker
-                    provider={provider}
-                    label="Model override"
-                    placeholder="Use provider default"
-                    value={model}
-                    onChange={setModel}
-                  />
-                </details>
-              </div>
-              <button className="provider-settings" onClick={onSettings}>
-                <Settings2 size={14} />
-                {providers.length
-                  ? "Manage AI connections"
-                  : "Connect your AI provider"}
-                <ArrowRight size={14} />
-              </button>
-              </>}
-            </>
-          ) : panel === "layers" ? (
+          {conversationMode || panel === "chat" ? null : panel === "layers" ? (
             <LayerTree doc={doc} page={page} selection={selection} select={selectLayer} group={groupSelection} ungroup={ungroupSelection} change={change} />
 
           ) : (
@@ -2145,12 +1887,14 @@ export function Editor({
               <span>Previewing an AI proposal</span>
               <button
                 className="button small"
+                disabled={assistantRunning}
                 onClick={async () => {if(agentProposal){try{await post(`${agentSessionPath(project.id,agentProposal.sessionId)}/proposal/discard`,{proposalVersion:agentProposal.version});setAgentProposal(null);setAgentRefreshKey(key=>key+1);}catch(e){setError(message(e));return;}}setProposal(null);setProposalGuard(null);}}
               >
                 Discard
               </button>
               <button
                 className="button primary small"
+                disabled={assistantRunning || dirty || !!busy}
                 onClick={async () => {
                   if(agentProposal){try{const {project:next}=await post<{project:Project}>(`${agentSessionPath(project.id,agentProposal.sessionId)}/proposal/apply`,{proposalVersion:agentProposal.version});remember();setDoc(next.document);docRef.current=next.document;projectRef.current=next;setProject(next);onProject(next);setSaved(documentFingerprint(next.document));setProposal(null);setProposalGuard(null);setAgentProposal(null);notify('Agent proposal applied and saved.');}catch(e){setError(message(e));}return;}
                   if(proposalGuard){try{const {project:next}=await saveDocument<{project:Project}>(`/api/projects/${project.id}/document`,{document:proposal,expectedRevision:proposalGuard.baseRevision,expectedBriefRevision:proposalGuard.baseBriefRevision});remember();setDoc(next.document);docRef.current=next.document;setProject(next);onProject(next);setSaved(documentFingerprint(next.document));setProposal(null);setProposalGuard(null);notify('Proposal applied and saved.');}catch(e){setError(message(e));}return;}
@@ -2201,7 +1945,7 @@ export function Editor({
               if (e.target === e.currentTarget) setSelected(null);
             }}
           >
-            {displayed.kind === "3d" ? (
+            {conversationMode && !page.nodes.length ? <div className="conversation-preview-empty"><Sparkles size={28}/><h2>Your design will appear here</h2><p>Clarify your idea in chat, review the brief, then create a draft.</p><small>Nothing is saved to the design until you apply it.</small></div> : displayed.kind === "3d" ? (
               <Suspense fallback={<Busy label="Opening 3D viewport…" />}>
                 <SceneView
                   onSeek={value=>{setTime(value);setPlaying(false);}}

@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test('App creation supports multiple mobile, tablet, and desktop targets', async ({ page }) => {
   await page.goto('/');
 
-  await page.getByRole('group', { name: 'Design type' }).getByRole('button', { name: 'App' }).click();
+  await page.getByLabel('Design type', { exact: true }).selectOption('app');
 
   const targets = page.getByRole('group', { name: 'App targets' }).first();
   const mobile = targets.getByRole('checkbox', { name: 'Mobile' });

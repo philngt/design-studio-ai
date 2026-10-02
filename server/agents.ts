@@ -9,12 +9,14 @@ import { mutateDocument, operationSchema } from '../src/shared/operations';
 import { blocks, themes, templates } from '../src/shared/catalog';
 import { inspectDesign } from '../src/shared/design-checks';
 import { renderSvg } from '../src/shared/render';
-import { agentProviderSchema, agentCreateSchema, agentMessageSchema, agentPermissionSchema, agentProposalActionSchema, agentTools, compactOperationsSchema, type AgentEmission, type AgentEvent, type AgentSession, type AgentToolName } from '../src/shared/agents';
+import { agentProviderSchema, agentCreateSchema, agentMessageSchema, agentPermissionSchema, agentProposalActionSchema, agentTools, agentToolNames, compactOperationsSchema, type AgentEmission, type AgentEvent, type AgentSession, type AgentToolName, type AgentPurpose } from '../src/shared/agents';
+import { readBriefHistory, saveBrief } from './briefs';
 
 interface SessionRow {
   id: string; project_id: string; user_id: string; provider: AgentSession['provider']; model: string | null;
   status: AgentSession['status']; native_handle: string | null; draft_document: string; draft_version: number;
   has_proposal: number; base_revision: number; base_brief_revision: number; created_at: string; updated_at: string;
+  purpose: AgentPurpose;
 }
 function access(c: Context<Env>) {
   const user = owner(c);
@@ -25,7 +27,7 @@ function access(c: Context<Env>) {
 }
 function serialize(row: SessionRow): AgentSession {
   return { id: row.id, projectId: row.project_id, provider: row.provider, model: row.model, status: row.status,
-    createdAt: row.created_at, updatedAt: row.updated_at,
+    createdAt: row.created_at, updatedAt: row.updated_at, purpose: row.purpose, baseRevision: row.base_revision, baseBriefRevision: row.base_brief_revision,
     proposal: row.has_proposal ? { document: documentSchema.parse(JSON.parse(row.draft_document)), version: row.draft_version, baseRevision: row.base_revision, baseBriefRevision: row.base_brief_revision } : null };
 }
 async function session(c: Context<Env>, sessionId: string) {
@@ -54,7 +56,19 @@ async function tool(c: Context<Env>, sessionId: string, name: AgentToolName, inp
   const row = await session(c, sessionId);
   if (!['running','waiting_permission'].includes(row.status)) fail(409, 'agent_not_running', 'This turn no longer authorizes tool calls.');
   if (!Object.hasOwn(agentTools, name)) fail(400, 'unknown_tool', 'Unknown Studio draft tool.');
+  if (!agentToolNames(row.purpose).includes(name)) fail(403, 'tool_forbidden', 'This tool is not available for this session purpose.');
   const body = agentTools[name].schema.parse(input) as any;
+  if (row.purpose === 'interview') {
+    const current = await brief(c, row.project_id, false);
+    if (!current.value || current.value.status === 'approved') fail(409, 'interview_closed', 'The brief is approved or unavailable. Open its questions to revise it explicitly.');
+    if (name === 'studio_brief_context') {
+      const project = await projectRow(c, row.project_id);
+      return { project: { name: project.name, kind: project.kind, document: JSON.parse(project.document) }, brief: current.value, history: await readBriefHistory(c, row.project_id, Math.max(0, current.revision - 50)) };
+    }
+    const next = await saveBrief(c, row.project_id, { expectedRevision: body.expectedRevision, interview: body.interview });
+    await event(c, row.id, { type: 'brief', data: { revision: next.revision } });
+    return { brief: next, message: 'Questions saved. Only the human can approve the scope.' };
+  }
   const document = documentSchema.parse(JSON.parse(row.draft_document));
   if (name === 'studio_schema') {
     if(body.operation){const schema=operationSchema.options.find(option=>option.shape.op.value===body.operation);if(!schema)fail(400,'unknown_operation','Unknown operation. Read the operation names first.');return {operation:z.toJSONSchema(schema)};}
@@ -98,10 +112,12 @@ agentRoutes.get(root, async c => {
 agentRoutes.post(root,async c=>{
   const runtime=access(c), body=agentCreateSchema.parse(await c.req.json()), project=await projectRow(c,c.req.param('id'));
   if(body.expectedRevision!==project.revision)fail(409,'revision_conflict','Save or reload the design before creating a session.');
-  const approved=await brief(c,project.id), catalog=await runtime.catalog();
+  const approved=await brief(c,project.id,body.purpose==='design'), catalog=await runtime.catalog();
+  if(body.purpose==='interview'&&(!approved.value||approved.value.status==='approved'))fail(409,'interview_closed','Save an unapproved brief before starting its interview.');
+  if((body.purpose==='interview'||body.expectedBriefRevision!==undefined)&&body.expectedBriefRevision!==approved.revision)fail(409,'revision_conflict','Reload the current brief before starting its interview.');
   if(!catalog.providers.find(p=>p.id===body.provider)?.installed)fail(400,'agent_unavailable','Install this agent CLI on the server and configure its credentials.');
   const sessionId=id(), timestamp=now();
-  await c.env.DB.prepare('INSERT INTO agent_sessions(id,project_id,user_id,provider,model,draft_document,base_revision,base_brief_revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(sessionId,project.id,owner(c),body.provider,body.model??null,project.document,project.revision,approved.revision,timestamp,timestamp).run();
+  await c.env.DB.prepare('INSERT INTO agent_sessions(id,project_id,user_id,provider,model,draft_document,base_revision,base_brief_revision,created_at,updated_at,purpose) VALUES(?,?,?,?,?,?,?,?,?,?,?)').bind(sessionId,project.id,owner(c),body.provider,body.model??null,project.document,project.revision,approved.revision,timestamp,timestamp,body.purpose).run();
   return c.json({session:serialize(await session(c,sessionId))},201);
 });
 agentRoutes.get(`${root}/:sessionId`,async c=>c.json({session:serialize(await session(c,c.req.param('sessionId')))}));
@@ -110,8 +126,9 @@ agentRoutes.post(`${root}/:sessionId/messages`,async c=>{
   const payload=JSON.stringify(body);
   const existing=await c.env.DB.prepare('SELECT id,payload,status FROM agent_turns WHERE session_id=? AND request_id=?').bind(row.id,body.requestId).first<{id:string;payload:string;status:string}>();
   if(existing){if(existing.payload!==payload)fail(409,'request_conflict','This request ID was used with a different message.');return c.json({turnId:existing.id,status:existing.status},202);}
-  const current=await projectRow(c,row.project_id), approved=await brief(c,row.project_id);
-  if(body.expectedRevision!==current.revision||row.base_revision!==current.revision||row.base_brief_revision!==approved.revision)fail(409,'revision_conflict','The saved design or brief changed. Start a new session from the latest design.');
+  const current=await projectRow(c,row.project_id), approved=await brief(c,row.project_id,row.purpose==='design');
+  if(row.purpose==='interview'&&(!approved.value||approved.value.status==='approved'))fail(409,'interview_closed','The brief is already approved. Start a design session.');
+  if(body.expectedRevision!==current.revision||(row.purpose==='design'&&(row.base_revision!==current.revision||row.base_brief_revision!==approved.revision))||((row.purpose==='interview'||body.expectedBriefRevision!==undefined)&&body.expectedBriefRevision!==approved.revision))fail(409,'revision_conflict','The saved design or brief changed. Reload its current state before continuing.');
   const turnId=id();
   const results=await c.env.DB.batch([
     c.env.DB.prepare("UPDATE agent_sessions SET status='running',updated_at=? WHERE id=? AND status IN ('idle','interrupted','error') AND NOT EXISTS(SELECT 1 FROM agent_sessions WHERE project_id=? AND status IN ('running','waiting_permission','stopping','applying'))").bind(now(),row.id,row.project_id),
@@ -128,7 +145,7 @@ agentRoutes.post(`${root}/:sessionId/messages`,async c=>{
   void (async()=>{
     let status: 'idle'|'error'|'interrupted'='idle';
     try{
-      await runtime.run({sessionId:row.id,provider:row.provider,model:row.model??undefined,nativeHandle:row.native_handle??undefined,prompt:body.prompt,
+      await runtime.run({sessionId:row.id,provider:row.provider,purpose:row.purpose,model:row.model??undefined,nativeHandle:row.native_handle??undefined,prompt:body.prompt,
         tool:(name,input)=>tool(c,row.id,name,input),
         persistHandle:async handle=>{await c.env.DB.prepare('UPDATE agent_sessions SET native_handle=? WHERE id=?').bind(handle,row.id).run();},
         emit:async emission=>{
@@ -184,6 +201,7 @@ agentRoutes.post(`${root}/:sessionId/permissions`,async c=>{
 agentRoutes.get(`${root}/:sessionId/proposal`,async c=>c.json({proposal:serialize(await session(c,c.req.param('sessionId'))).proposal}));
 agentRoutes.post(`${root}/:sessionId/proposal/:action`,async c=>{
   const row=await session(c,c.req.param('sessionId')),body=agentProposalActionSchema.parse(await c.req.json());
+  if(row.purpose==='interview')fail(403,'tool_forbidden','Interview sessions cannot apply or discard designs.');
   const action=z.enum(['apply','discard']).parse(c.req.param('action'));
   const operationId=`job-agent-${row.id}-${body.proposalVersion}`;
   if(action==='apply'){

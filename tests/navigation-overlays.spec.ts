@@ -57,7 +57,7 @@ test('selecting a 3D object retains a stable keyboard editing focus', async ({ p
   });
   expect(created.status()).toBe(201);
   const { project } = await created.json();
-  await page.goto(`/?project=${project.id}`);
+  await page.goto(`/?project=${project.id}&mode=edit`);
   const canvas = page.locator('.scene-view canvas:not([data-scene-layer])');
   await expect(canvas).toBeVisible();
   // Keep the saved baseline fixed while checking keyboard nudge and undo.

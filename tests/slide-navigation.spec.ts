@@ -11,7 +11,7 @@ test('thumbnail arrow keys select slides, retain focus, and preserve canvas and 
   expect(created.status()).toBe(201);
   const { project } = await created.json() as { project: Project };
   try {
-    await page.goto(`/?project=${project.id}`);
+    await page.goto(`/?project=${project.id}&mode=edit`);
     const thumbnails = page.locator('.page-thumbnail');
     await expect(thumbnails).toHaveCount(3);
     await thumbnails.nth(0).click();

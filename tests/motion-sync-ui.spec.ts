@@ -53,7 +53,7 @@ test('stalled Live request releases Save and Share without retrying an uncertain
  let release!:()=>void;const gate=new Promise<void>(r=>release=r);let started=false;
  await page.route('**/merge',async route=>{started=true;await gate;await route.continue().catch(()=>{});});
  try{
-  await page.goto(`/?project=${project.id}`);
+  await page.goto(`/?project=${project.id}&mode=edit`);
   await page.getByRole('textbox',{name:'Project name',exact:true}).fill('Pending local edit');
   await expect.poll(()=>started).toBe(true);
   await page.getByRole('button',{name:'Save',exact:true}).click();

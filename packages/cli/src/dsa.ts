@@ -85,6 +85,7 @@ registerVisualInspectionCommands(projects, client);
 projects.command('paint <id>').description('Execute a revision-guarded raster stroke/fill from JSON; operationId enables exact retries').requiredOption('--file <path>', 'Painting command JSON or - for stdin').action(wrap(async (id, options) => client().json(`${projectPath(id)}/paint`, 'POST', paintingCommandSchema.parse(await inputJson(options.file)))));
 const briefs = program.command('brief').description('Persist an interview and explicitly approve its design scope');
 briefs.command('get <id>').action(wrap(id => client().json(`${projectPath(id)}/brief`)));
+briefs.command('history <id>').description('Read committed brief snapshots; follow nextAfter for the next page').option('--after <revision>', 'Read revisions after this value', '0').action(wrap((id, options) => client().json(`${projectPath(id)}/brief/history?after=${z.coerce.number().int().nonnegative().parse(options.after)}`)));
 briefs.command('put <id>').description('Create/update from JSON: request, interview, answers, scope; every write invalidates approval').requiredOption('--revision <number>', 'Expected brief revision; 0 creates').requiredOption('--file <path>', 'Brief update JSON or - for stdin').action(wrap(async (id, options) => {
   const expectedRevision = Number(options.revision);
   if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) throw new CliError('invalid_revision', 'Brief revision must be a nonnegative integer.');

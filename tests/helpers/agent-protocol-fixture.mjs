@@ -14,6 +14,13 @@ async function edit(){
     const response=await fetch(process.env.STUDIO_DRAFT_URL,{method:'POST',headers:{Authorization:`Bearer ${process.env.STUDIO_DRAFT_TOKEN}`,'Content-Type':'application/json'},body:JSON.stringify({name,input})});
     if(!response.ok)throw new Error('Gateway rejected fixture tool.');return response.json();
   };
+  if(process.env.STUDIO_AGENT_PURPOSE==='interview'){
+    const blocked=await fetch(process.env.STUDIO_DRAFT_URL,{method:'POST',headers:{Authorization:`Bearer ${process.env.STUDIO_DRAFT_TOKEN}`,'Content-Type':'application/json'},body:JSON.stringify({name:'studio_edit',input:{version:0,operations:[{op:'rename',name:'Forbidden'}]}})});
+    if(blocked.ok)throw new Error('Interview gateway exposed design tools.');
+    const context=await call('studio_brief_context',{});
+    await call('studio_submit_interview',{expectedRevision:context.brief.revision,interview:{message:'Who is this for?',questions:[{id:'audience',title:'Who is this for?',type:'text',options:[],required:true}],scope:null}});
+    return;
+  }
   const context=await call('studio_context',{});
   await call('studio_edit',{version:context.version,operations:[{op:'rename',name:'Protocol fixture draft'}]});
 }

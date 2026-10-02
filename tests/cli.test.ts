@@ -82,6 +82,9 @@ test('CLI persists a versioned brief, approves scope and reads deterministic des
   const approved=await json(['brief','approve',projectId,'--revision','2']);
   assert.equal(approved.brief.status,'approved');
   assert.equal((await json(['brief','get',projectId])).brief.revision,3);
+  const history=await json(['brief','history',projectId,'--after','1']);
+  assert.deepEqual(history.history.map((snapshot:any)=>snapshot.revision),[2,3]);
+  assert.equal(history.history[0].status,'ready');assert.equal(history.history[1].status,'approved');assert.equal(history.nextAfter,null);
   const reapproved=await run(['brief','approve',projectId,'--revision','2']);
   assert.equal(reapproved.code,1);assert.equal(JSON.parse(reapproved.stderr).error.code,'revision_conflict');
   const textNode=created.project.document.pages[0].nodes.find((value:any)=>value.type==='text');
