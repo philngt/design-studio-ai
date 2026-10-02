@@ -65,3 +65,17 @@ Claude uses its Agent SDK, Codex its app-server protocol, Copilot ACP, OpenCode 
 Copilot launches in default stdio ACP mode, explicitly allows the `studio` MCP server, denies file/shell/URL/memory permissions and disables built-in MCP servers and custom instructions. Additional permission requests are cancelled, never authorized by a tool's display title. These controls follow its [tool permission contract](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference#tool-permission-patterns); operators must still verify their pinned CLI and avoid unrelated global plugins/server configuration.
 
 Missing CLI, failed authentication, model denial, malformed protocol, interruptions and stale proposals return explicit errors; production never substitutes fixture output. Local contract/protocol tests do not establish successful live generation from all five providers. A real provider smoke test requires the operator's credentials and consent to possible charges.
+
+### Claude Studio-tool readiness
+
+Before sending a turn's prompt, Studio waits up to 30 seconds for that Claude session's `studio` MCP server to connect and advertise every tool required by the session purpose. Interview sessions require `studio_brief_context` and `studio_submit_interview`; design sessions require the six draft tools above. Built-in tools remain disabled. This follows the SDK's [MCP connection-status guidance](https://code.claude.com/docs/en/agent-sdk/mcp#error-handling): a failed MCP connection does not necessarily fail a query by itself.
+
+Missing tools, failed/disabled/auth-required connections, unreadable status or a timeout stop the turn before its prompt is sent. Chat and all event clients receive `error` with code `agent_tools_unavailable` and a credential-free diagnostic. Saved brief/design state stays unchanged. Check the pinned Claude CLI and MCP subprocess setup under the Studio service account; a CLI that cannot report its connected tool inventory is not compatible with this guard. Fix the setup, then explicitly send again. Reload and an exact request-ID retry do not rerun the failed turn; a deliberate new turn needs a new request ID. Stop remains available during connection checks.
+
+The optional offline check uses an installed Claude executable, the real Studio bridge, a disposable CLI home and a loopback provider that rejects generation. It verifies prompt/tool wiring without operator credentials or paid model calls, not live model success:
+
+```sh
+STUDIO_TEST_CLAUDE_BIN=/absolute/path/to/claude node --import tsx --test tests/agent-claude-cli.test.ts
+```
+
+Validated locally with Claude Code 2.1.246 and the locked Agent SDK 0.3.246. This is not a guarantee for every CLI release or a diagnosis of an unobserved deployment.

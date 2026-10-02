@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,rm} from 'node:fs/promises';
+import {mkdtemp,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -49,6 +49,20 @@ test('all native adapters connect to contract subprocesses, call the draft gatew
 test('missing executable rejects requests and process teardown does not hang',{timeout:3000},async()=>{
   const proc=new AgentProcess('/definitely-missing-studio-agent',[],tmpdir(),{});
   await assert.rejects(proc.request('initialize',{},false,1000));await proc.close();
+});
+
+test('Claude runtime fails closed before any prompt/tool call when MCP fails, then allows an explicit retry',{timeout:15000},async()=>{
+  const directory=await mkdtemp(join(tmpdir(),'studio-claude-readiness-'));
+  const runtime=new NodeAgentRuntime(directory,{PATH:process.env.PATH,HOME:directory,STUDIO_AGENT_CLAUDE_BIN:binary});
+  let calls=0;const events:AgentEmission[]=[];
+  const input={sessionId:crypto.randomUUID(),provider:'claude' as const,purpose:'interview' as const,prompt:'Clarify',emit:async(event:AgentEmission)=>{events.push(event);},persistHandle:async()=>{},tool:async(name:string)=>{calls++;return name==='studio_brief_context'?{brief:{revision:1}}:{brief:{revision:2}};}};
+  try{
+    await writeFile(join(directory,'claude-fixture.json'),JSON.stringify({status:'failed'}));
+    await assert.rejects(runtime.run(input),{name:'ClaudeToolsUnavailableError'});
+    assert.equal(calls,0);assert.equal(events.length,0);
+    await writeFile(join(directory,'claude-fixture.json'),'{}');
+    await runtime.run(input);assert.equal(calls,2);
+  }finally{await runtime.close();await rm(directory,{recursive:true,force:true});}
 });
 
 test('the real stdio MCP bridge advertises compact tools and authenticates draft calls',{timeout:15000},async()=>{

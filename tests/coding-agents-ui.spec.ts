@@ -2,6 +2,52 @@ import {test,expect} from './authenticated-browser';
 import type {Page} from '@playwright/test';
 import {createDocument} from '../src/shared/catalog';
 import {agentProviders,type AgentSession,type AgentEvent} from '../src/shared/agents';
+import {ClaudeToolsUnavailableError} from '../server/agent-runtime-contract';
+
+test('Claude tool connection errors stay visible after reload and retry only on request',async({page,baseURL})=>{
+  // UI transport fixture; real CLI/MCP startup is exercised separately.
+  const headers={Origin:baseURL!};
+  const {project}=await (await page.request.post('/api/projects',{headers,data:{name:'Claude connection recovery',kind:'web'}})).json();
+  const briefPath=`/api/projects/${project.id}/brief`,path=`/api/projects/${project.id}/agent-sessions`;
+  await page.request.put(briefPath,{headers,data:{expectedRevision:0,request:'Clarify my design'}});
+  const before=(await (await page.request.get(briefPath)).json()).brief;
+  let session:AgentSession|undefined,turns=0;
+  const events:AgentEvent[]=[],failure=new ClaudeToolsUnavailableError('missing-tools');
+  await page.route('**/api/agent-providers',route=>route.fulfill({json:{enabled:true,providers:agentProviders.map(p=>({...p,installed:true,authentication:'unknown',models:[]}))}}));
+  await page.route(`**${path}**`,async route=>{
+    const req=route.request(),suffix=new URL(req.url()).pathname.slice(path.length);
+    if(!suffix){
+      if(req.method()!=='POST')return route.fulfill({json:{sessions:session?[session]:[]}});
+      const now=new Date().toISOString();
+      session={id:crypto.randomUUID(),projectId:project.id,provider:'claude',purpose:'interview',model:null,status:'idle',baseRevision:project.revision,baseBriefRevision:before.revision,createdAt:now,updatedAt:now,proposal:null};
+      return route.fulfill({status:201,json:{session}});
+    }
+    if(suffix.endsWith('/messages')){
+      turns++;session!.status='error';
+      for(const [type,data] of [['user',{text:req.postDataJSON().prompt}],['error',{code:failure.code,message:failure.message}],['status',{status:'error'}]] as const){
+        events.push({seq:events.length+1,sessionId:session!.id,type,data,createdAt:new Date().toISOString()});
+      }
+      return route.fulfill({status:202,json:{turnId:crypto.randomUUID(),status:'running'}});
+    }
+    if(suffix.endsWith('/events'))return route.fulfill({contentType:'text/event-stream',body:events.map(e=>`id: ${e.seq}\nevent: agent\ndata: ${JSON.stringify(e)}\n\n`).join('')});
+    return route.fulfill({json:{session}});
+  });
+  try{
+    await page.goto(`/?project=${project.id}`);await openChat(page);
+    await page.getByLabel('Design assistant').selectOption('agent:claude');
+    const start=page.getByRole('button',{name:'Start conversation',exact:true});
+    await start.click();
+    await expect(page.getByRole('alert')).toContainText(failure.message);
+    await expect(start).toBeEnabled();expect(turns).toBe(1);
+    await expect(page.getByRole('button',{name:'View design',exact:true})).toHaveCount(0);
+    await page.reload();await openChat(page);
+    await expect(page.getByRole('alert')).toContainText(failure.message);expect(turns).toBe(1);
+    await start.click();await expect.poll(()=>turns).toBe(2);
+    await expect(page.getByRole('alert')).toHaveCount(2);
+    expect((await (await page.request.get(briefPath)).json()).brief).toEqual(before);
+    expect((await (await page.request.get(`/api/projects/${project.id}`)).json()).project.revision).toBe(project.revision);
+  }finally{await page.request.delete(`/api/projects/${project.id}`,{headers});}
+});
 
 test('native interview continues into a separate design session only after explicit approval',async({page,baseURL})=>{
   // Native transport fixture only; brief persistence, approval and document reads use the real server.

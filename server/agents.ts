@@ -11,6 +11,7 @@ import { inspectDesign } from '../src/shared/design-checks';
 import { renderSvg } from '../src/shared/render';
 import { agentProviderSchema, agentCreateSchema, agentMessageSchema, agentPermissionSchema, agentProposalActionSchema, agentTools, agentToolNames, compactOperationsSchema, type AgentEmission, type AgentEvent, type AgentSession, type AgentToolName, type AgentPurpose } from '../src/shared/agents';
 import { readBriefHistory, saveBrief } from './briefs';
+import { ClaudeToolsUnavailableError } from './agent-runtime-contract';
 
 interface SessionRow {
   id: string; project_id: string; user_id: string; provider: AgentSession['provider']; model: string | null;
@@ -156,7 +157,10 @@ agentRoutes.post(`${root}/:sessionId/messages`,async c=>{
       });
     }catch(error){
       status=error instanceof Error&&error.name==='AbortError'?'interrupted':'error';
-      await event(c,row.id,{type:'error',data:{code:status==='interrupted'?'agent_interrupted':'agent_failed',message:status==='interrupted'?'Agent stopped. The saved design is unchanged.':'Agent could not finish. Check CLI authentication, model access and the server configuration, then retry.'}});
+      const data=status==='interrupted'?{code:'agent_interrupted',message:'Agent stopped. The saved design is unchanged.'}
+        :error instanceof ClaudeToolsUnavailableError?{code:error.code,message:error.message}
+        :{code:'agent_failed',message:'Agent could not finish. Check CLI authentication, model access and the server configuration, then retry.'};
+      await event(c,row.id,{type:'error',data});
     }finally{
       const state=await c.env.DB.prepare('SELECT status FROM agent_sessions WHERE id=?').bind(row.id).first<{status:string}>();
       if(state?.status==='stopping')status='interrupted';

@@ -10,6 +10,7 @@ import { ClientSideConnection, ndJsonStream } from '@agentclientprotocol/sdk';
 import { agentProviders, agentToolNames, type AgentCatalog, type AgentEmission, type AgentProvider, type AgentToolName } from '../src/shared/agents';
 import type { AgentRuntime, AgentRunInput } from './agent-runtime-contract';
 import { AgentProcess } from './agent-jsonl';
+import { waitForClaudeStudioTools } from './agent-claude-tools';
 
 const execute=promisify(execFile);
 const instructions='You are designing in Design Studio AI. Use only the studio draft tools. First call studio_context and studio_schema. Read the approved brief. Edit the canonical draft through studio_edit or studio_replace, inspect it, then describe the proposal. Never claim it was saved or applied. Only the human can Apply. Preserve project identity, owned assets, schema version and brief scope. Do not use filesystem/shell tools or start other agents. Re-read studio_context at the start of every turn.';
@@ -119,11 +120,20 @@ export class NodeAgentRuntime implements AgentRuntime {
     if(run.abort.signal.aborted)throw abortError();
       if(input.provider==='claude'){
         const {query}=await import('@anthropic-ai/claude-agent-sdk');
-        const q=query({prompt:turnInstructions+'\n\n'+input.prompt,options:{cwd:directory,env,pathToClaudeCodeExecutable:this.binary('claude'),model:input.model,resume:input.nativeHandle,includePartialMessages:true,abortController:run.abort,tools:[],settingSources:[],strictMcpConfig:true,mcpServers:{studio:mcp},canUseTool:async(name,args)=>{
-          if(name.startsWith('mcp__studio__'))return {behavior:'allow' as const,updatedInput:args};
+        const allowedTools=availableTools.map(name=>`mcp__studio__${name}`);
+        let releasePrompt!:(send:boolean)=>void;
+        const ready=new Promise<boolean>(resolve=>{releasePrompt=resolve;});
+        async function* prompt():AsyncGenerator<import('@anthropic-ai/claude-agent-sdk').SDKUserMessage>{
+          if(await ready)yield {type:'user',session_id:input.nativeHandle??'',parent_tool_use_id:null,message:{role:'user',content:turnInstructions+'\n\n'+input.prompt}};
+        }
+        const q=query({prompt:prompt(),options:{cwd:directory,env,pathToClaudeCodeExecutable:this.binary('claude'),model:input.model,resume:input.nativeHandle,includePartialMessages:true,abortController:run.abort,tools:[],settingSources:[],strictMcpConfig:true,mcpServers:{studio:mcp},canUseTool:async(name,args)=>{
+          if(allowedTools.includes(name))return {behavior:'allow' as const,updatedInput:args};
           return {behavior:'deny' as const,message:'Only Studio draft tools are enabled for this session.'};
         }}});
-        run.close=async()=>{q.close();};
+        run.close=async()=>{releasePrompt(false);q.close();};
+        await waitForClaudeStudioTools(q,availableTools,run.abort.signal);
+        if(run.abort.signal.aborted)throw abortError();
+        releasePrompt(true);
         for await(const raw of q){
           const message=raw as any;
           if(message.session_id)await input.persistHandle(message.session_id);

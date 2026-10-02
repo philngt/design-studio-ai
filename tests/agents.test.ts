@@ -8,6 +8,7 @@ import {FileBucket,SqliteDatabase} from '../server/node-adapters';
 import {secret,hash} from '../server/security';
 import type {Bindings} from '../server/types';
 import type {AgentRuntime,AgentRunInput} from '../server/agent-runtime-contract';
+import {ClaudeToolsUnavailableError} from '../server/agent-runtime-contract';
 import {agentProviders,agentSessionPath,type AgentSession} from '../src/shared/agents';
 import {JsonLines} from '../server/agent-jsonl';
 import {agentEnvironment} from '../server/agent-runtime-node';
@@ -110,6 +111,29 @@ test('coding-agent HTTP contract uses real SQLite, owner checks, draft tools and
       };
       await json(await request(path+'/messages','POST',{requestId:crypto.randomUUID(),prompt:'Validate',expectedRevision:project.revision}),202);await settle(session.id,project.id);
       assert.equal((await json(await request(path))).session.proposal,null);
+    });
+    await t.test('tool readiness failures reach Chat safely, retain the design, and require explicit retry',async()=>{
+      const before=(await json(await request(`/api/projects/${project.id}`))).project;
+      const priorCalls=calls;
+      onRun=async()=>{throw new ClaudeToolsUnavailableError('missing-tools');};
+      const body={requestId:crypto.randomUUID(),prompt:'Clarify',expectedRevision:project.revision};
+      const first=await json(await request(path+'/messages','POST',body),202);
+      assert.equal((await settle(session.id,project.id)).status,'error');
+      const errors=(await json(await request(path+'/events'))).events.filter((e:any)=>e.type==='error');
+      assert.equal(errors.at(-1).data.code,'agent_tools_unavailable');
+      assert.match(errors.at(-1).data.message,/Your prompt was not sent/);
+      assert.deepEqual((await json(await request(`/api/projects/${project.id}`))).project,before);
+      assert.equal((await json(await request(path+'/messages','POST',body),202)).turnId,first.turnId);
+      assert.equal(calls,priorCalls+1);
+      onRun=async()=>{throw new Error('private-sdk-credential');};
+      await json(await request(path+'/messages','POST',{...body,requestId:crypto.randomUUID()}),202);
+      await settle(session.id,project.id);
+      const events=(await json(await request(path+'/events'))).events;
+      assert.equal(events.filter((e:any)=>e.type==='error').at(-1).data.code,'agent_failed');
+      assert.doesNotMatch(JSON.stringify(events),/private-sdk-credential/);
+      onRun=async()=>{};
+      await json(await request(path+'/messages','POST',{...body,requestId:crypto.randomUUID()}),202);
+      assert.equal((await settle(session.id,project.id)).status,'idle');
     });
     await t.test('an unapproved brief prevents starting a session',async()=>{
       onRun=async input=>{const context=await input.tool('studio_context',{}) as any;await input.tool('studio_edit',{version:context.version,operations:[{op:'rename',name:'Old scope draft'}]});};
