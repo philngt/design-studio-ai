@@ -1,4 +1,5 @@
 import {registerOperationCommands} from './operation-commands';
+import {registerAgentCommands} from './agent-commands';
 import {version} from '../package.json';
 import { registerVisualInspectionCommands } from './visual-inspection-commands';
 import {registerCommunityCommands} from './community-commands';
@@ -30,6 +31,7 @@ const client = () => new Client(program.opts());
 registerDesignSystemCommands(program, client);
 registerSceneCommands(program, client);
 registerOperationCommands(program, client);
+registerAgentCommands(program, client);
 registerCommunityCommands(program, client);
 registerObservabilityCommands(program, client);
 const part = (value: string) => encodeURIComponent(value);

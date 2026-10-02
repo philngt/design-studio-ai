@@ -60,6 +60,8 @@ SQLite and assets persist under `DATA_DIR` (default `data`). See [deployment ins
 
 ## Agent access
 
+The self-hosted editor also supports opt-in Claude Code, Codex, Copilot, OpenCode and Pi sessions. They edit drafts for explicit human Apply/Discard, using CLI credentials for one operator-designated Studio account. See [coding-agent setup](docs/coding-agents.md); no Paseo service is required. This is available on Node/Docker, not Cloudflare Workers.
+
 Create an API token in Settings and inject `DESIGN_STUDIO_API_KEY` into the agent environment. Point `DESIGN_STUDIO_URL` at the Design Studio deployment you intend to use.
 
 The upstream hosted instance is available at `https://studio.agentkit.best`; it is not operated by this fork.

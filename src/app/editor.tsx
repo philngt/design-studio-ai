@@ -1,4 +1,6 @@
 import {OperationStatus} from './operation-status';
+import { AgentPanel } from './agent-panel';
+import { agentSessionPath } from '../shared/agents';
 import {AssetReplacement} from './asset-replacement';
 import {TimelineAudioPlayer} from './timeline-audio-player';
 import {timelineAudioCues} from '../shared/timeline-audio';
@@ -255,7 +257,7 @@ export function Editor({
         projectRevision: projectRef.current.revision,
       };
       briefProposal.current = pending;
-      setProposal(generated);setProposalGuard({baseRevision:pending.projectRevision,baseBriefRevision:pending.briefRevision});
+      setAgentProposal(null);setProposal(generated);setProposalGuard({baseRevision:pending.projectRevision,baseBriefRevision:pending.briefRevision});
     }
     const { project: next } = await saveDocument<{ project: Project }>(
       `/api/projects/${projectRef.current.id}/document`,
@@ -312,6 +314,10 @@ export function Editor({
   const [characterOpen,setCharacterOpen]=useState(false);
   const [frameStart,setFrameStart]=useState(0),[frameEnd,setFrameEnd]=useState(2),[frameFps,setFrameFps]=useState(12);
   const [proposalGuard,setProposalGuard]=useState<{baseRevision:number;baseBriefRevision:number}|null>(null);
+  const [generationMode,setGenerationMode]=useScreenState<'api'|'agent'>('assistant','api',['api','agent']);
+  const [agentInitialPrompt,setAgentInitialPrompt]=useState('');
+  const [agentProposal,setAgentProposal]=useState<{sessionId:string;version:number}|null>(null);
+  const [agentRefreshKey,setAgentRefreshKey]=useState(0);
   const designChecks = showChecks ? inspectDesign(doc) : null;
   const [live, setLive] = useState(true);
   const [syncStatus, setSyncStatus] = useState("Live");
@@ -937,7 +943,7 @@ export function Editor({
           expectedRevision: project.revision,
         },
       );
-      setProposal(result.document);setProposalGuard({baseRevision:result.baseRevision,baseBriefRevision:result.baseBriefRevision});
+      setAgentProposal(null);setProposal(result.document);setProposalGuard({baseRevision:result.baseRevision,baseBriefRevision:result.baseBriefRevision});
       setPageIndex(0);
       setPrompt("");
       await appendChat(
@@ -1579,6 +1585,7 @@ export function Editor({
         onManual={() => { setBriefManual(true); writeScreen({ brief: "editor" }); }}
         onSettings={onSettings}
         onGenerate={buildFromBrief}
+        onAgentGenerate={() => { setGenerationMode('agent');setAgentInitialPrompt('Create the design from the approved brief.');setBriefManual(true);setPanel('chat');setMobilePanel('chat');writeScreen({brief:'editor',panel:'chat',pane:'chat'}); }}
       />
     );
   if (!briefLoaded && !briefError)
@@ -1762,6 +1769,8 @@ export function Editor({
           </div>
           {panel === "chat" ? (
             <>
+              <div className="generation-mode" role="group" aria-label="Design assistant mode"><button className="button small" aria-pressed={generationMode==='api'} onClick={()=>setGenerationMode('api')}>API provider</button><button className="button small" aria-pressed={generationMode==='agent'} onClick={()=>setGenerationMode('agent')}>Coding agent</button></div>
+              {generationMode==='agent'?<AgentPanel projectId={project.id} revision={project.revision} refreshKey={agentRefreshKey} initialPrompt={agentInitialPrompt} blocked={dirty?'Save your canvas edits before using an agent.':!briefLoaded||brief&&brief.status!=='approved'?'Approve the design brief before using an agent.':undefined} onPreview={(next,sessionId)=>{setProposal(next.document);setProposalGuard({baseRevision:next.baseRevision,baseBriefRevision:next.baseBriefRevision});setAgentProposal({sessionId,version:next.version});setPageIndex(0);setMobilePanel('canvas');}}/>:<>
               <div className="chat-history">
                 <div className="studio-greeting">
                   <Brand compact />
@@ -1849,6 +1858,7 @@ export function Editor({
                   : "Connect your AI provider"}
                 <ArrowRight size={14} />
               </button>
+              </>}
             </>
           ) : panel === "layers" ? (
             <LayerTree doc={doc} page={page} selection={selection} select={selectLayer} group={groupSelection} ungroup={ungroupSelection} change={change} />
@@ -2135,13 +2145,14 @@ export function Editor({
               <span>Previewing an AI proposal</span>
               <button
                 className="button small"
-                onClick={() => setProposal(null)}
+                onClick={async () => {if(agentProposal){try{await post(`${agentSessionPath(project.id,agentProposal.sessionId)}/proposal/discard`,{proposalVersion:agentProposal.version});setAgentProposal(null);setAgentRefreshKey(key=>key+1);}catch(e){setError(message(e));return;}}setProposal(null);setProposalGuard(null);}}
               >
                 Discard
               </button>
               <button
                 className="button primary small"
                 onClick={async () => {
+                  if(agentProposal){try{const {project:next}=await post<{project:Project}>(`${agentSessionPath(project.id,agentProposal.sessionId)}/proposal/apply`,{proposalVersion:agentProposal.version});remember();setDoc(next.document);docRef.current=next.document;projectRef.current=next;setProject(next);onProject(next);setSaved(documentFingerprint(next.document));setProposal(null);setProposalGuard(null);setAgentProposal(null);notify('Agent proposal applied and saved.');}catch(e){setError(message(e));}return;}
                   if(proposalGuard){try{const {project:next}=await saveDocument<{project:Project}>(`/api/projects/${project.id}/document`,{document:proposal,expectedRevision:proposalGuard.baseRevision,expectedBriefRevision:proposalGuard.baseBriefRevision});remember();setDoc(next.document);docRef.current=next.document;setProject(next);onProject(next);setSaved(documentFingerprint(next.document));setProposal(null);setProposalGuard(null);notify('Proposal applied and saved.');}catch(e){setError(message(e));}return;}
                   remember();
                   setDoc(proposal);

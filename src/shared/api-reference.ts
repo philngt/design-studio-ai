@@ -1,8 +1,10 @@
 import { z } from 'zod';
+import { agentEndpoints } from './agent-endpoints';
 import {version} from '../../package.json';
 import { clientEventSchema, telemetryQuerySchema } from './observability';
 import { communityEndpoints, type CommunityEndpoint } from './community-endpoints';
 export const apiEndpoints = [
+  ...agentEndpoints,
   { method: 'POST', path: '/api/projects/{id}/inspect', summary: 'See saved page/view/slide or paginated project contact sheet as PNG images with revision and page mapping; read-only', body: { mode: 'overview', offset: 0, limit: 6 } },
   { method: 'POST', path: '/api/projects/inspect', summary: 'See paginated private workspace project covers as PNG images with project IDs and revisions; read-only', body: { offset: 0, limit: 6 } },
   ...(communityEndpoints as readonly CommunityEndpoint[]).map(endpoint=>({method:endpoint.method,path:`/api/community${endpoint.path}`,summary:endpoint.summary,body:endpoint.body||endpoint.upload?{}:undefined})),
@@ -69,7 +71,8 @@ export function openApiDocument(schemas: Record<string, unknown>) {
   for (const endpoint of apiEndpoints) {
     const { method, path, summary, body } = endpoint;
     const parameters: unknown[] = [...path.matchAll(/\{(\w+)\}/g)].map(match => ({ name: match[1], in: 'path', required: true, schema: { type: 'string' } }));
-    if (path === '/api/fonts' || path.endsWith('/models')) parameters.push({ name: 'q', in: 'query', schema: { type: 'string', maxLength: 200 }, description: 'Case-insensitive catalog search' });
+    if (path === '/api/fonts' || path.startsWith('/api/providers/')&&path.endsWith('/models')) parameters.push({ name: 'q', in: 'query', schema: { type: 'string', maxLength: 200 }, description: 'Case-insensitive catalog search' });
+    if(path.includes('/agent-sessions/')&&path.endsWith('/events'))parameters.push({name:'after',in:'query',schema:{type:'integer',minimum:0}},{name:'stream',in:'query',schema:{type:'boolean'},description:'true returns SSE; Last-Event-ID overrides after on reconnect'},{name:'Last-Event-ID',in:'header',schema:{type:'integer',minimum:0}});
     if (method === 'GET' && path === '/api/design-systems/{id}') parameters.push({ name: 'version', in: 'query', schema: { type: 'integer', minimum: 1 }, description: 'Immutable version; latest when omitted' });
     if (method === 'GET' && path.startsWith('/api/observability/')) {
       const definition = z.toJSONSchema(telemetryQuerySchema) as { properties: Record<string, unknown> };
@@ -82,7 +85,7 @@ export function openApiDocument(schemas: Record<string, unknown>) {
     const upload = method === 'POST' && (path.endsWith('/assets') || !!community?.upload);
     const content = upload
       ? { 'multipart/form-data': { schema: { type: 'object', required: community?.upload?['file','operationId']:['file'], properties: { file: { type: 'string', format: 'binary' },...(community?.upload?{operationId:{type:'string',maxLength:120}}:{}) } } } }
-      : { 'application/json': { schema: path.endsWith('/client-events') ? z.toJSONSchema(clientEventSchema) : schemas[`${method} ${path}`] ?? { type: 'object' }, example: body } };
+      : { 'application/json': { schema: path.endsWith('/client-events') ? z.toJSONSchema(clientEventSchema) : (()=>{const agent=agentEndpoints.find(e=>e.path===path&&e.method===method);return agent?.schema?z.toJSONSchema(agent.schema):schemas[`${method} ${path}`]??{type:'object'};})(), example: body } };
     (paths[path] ??= {})[method.toLowerCase()] = { summary, parameters,
       ...(community?.public?{security:[]}:{}),
       ...(body ? { requestBody: { required: true, content } } : {}),

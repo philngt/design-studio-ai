@@ -18,8 +18,11 @@ COPY --from=build /app/src/shared ./src/shared
 COPY --from=build /app/server ./server
 COPY --from=build /app/migrations ./migrations
 RUN npx playwright install --with-deps chromium
-RUN mkdir -p /data && chown -R node:node /data /app
+ARG CODING_AGENT_PACKAGES=""
+RUN if [ -n "$CODING_AGENT_PACKAGES" ]; then npm install --global $CODING_AGENT_PACKAGES; fi
+ENV HOME=/home/node XDG_CONFIG_HOME=/home/node/.config
+RUN mkdir -p /data /home/node/.config && chown -R node:node /data /app /home/node
 USER node
-VOLUME ["/data"]
+VOLUME ["/data", "/home/node"]
 EXPOSE 8787
 CMD ["node", "--import", "tsx", "server/node.ts"]

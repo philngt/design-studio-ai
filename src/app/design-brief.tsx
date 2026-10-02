@@ -27,6 +27,7 @@ type Props = {
   onBack: () => void;
   onManual: () => void;
   onSettings: () => void;
+  onAgentGenerate: () => void;
   onGenerate: (
     brief: DesignBrief,
     provider: string,
@@ -56,6 +57,7 @@ export function DesignBriefWorkspace({
   onBack,
   onManual,
   onSettings,
+  onAgentGenerate,
   onGenerate,
 }: Props) {
   const [request, setRequest] = useState(brief.request),
@@ -739,7 +741,8 @@ export function DesignBriefWorkspace({
                     </button>
                   )}
                 </div>
-                {approved ? (
+                {approved ? (<>
+                  <button className="button" disabled={!!busy||conflict} onClick={onAgentGenerate}>Design with a coding agent</button>
                   <button
                     className="button primary"
                     disabled={!!busy || !provider || conflict}
@@ -753,6 +756,7 @@ export function DesignBriefWorkspace({
                     Generate design
                     <ArrowRight size={16} />
                   </button>
+                  </>
                 ) : scope ? (
                   <button
                     className="button primary"

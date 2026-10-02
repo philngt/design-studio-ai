@@ -392,9 +392,12 @@ projectRoutes.delete("/:id", async (c) => {
   )
     .bind(row.id, owner(c), row.id, row.id, row.id)
     .all<{ storage_key: string }>();
+  const agentSessions=c.env.AGENT_RUNTIME?await c.env.DB.prepare('SELECT id FROM agent_sessions WHERE project_id=? AND user_id=?').bind(row.id,owner(c)).all<{id:string}>():undefined;
   await c.env.DB.prepare("DELETE FROM projects WHERE id=? AND user_id=?")
     .bind(row.id, owner(c))
     .run();
+  // Delete first to revoke draft tools, then stop only this project's owned CLI processes.
+  if(agentSessions)await Promise.all(agentSessions.results.map(s=>c.env.AGENT_RUNTIME!.interrupt(s.id)));
   for (const asset of assets.results)
     await c.env.ASSETS_BUCKET.delete(asset.storage_key);
   return c.json({ ok: true });

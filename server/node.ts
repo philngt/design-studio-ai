@@ -8,6 +8,7 @@ import { FileBucket, SqliteDatabase, staticAssets } from "./node-adapters";
 import type { Bindings } from "./types";
 import { launchExportBrowser } from './export-node';
 import { ensureBootstrapAdmin } from './bootstrap-admin';
+import { NodeAgentRuntime } from './agent-runtime-node';
 const dataDir = resolve(process.env.DATA_DIR ?? "data");
 await mkdir(dataDir, { recursive: true });
 const db = new SqliteDatabase(resolve(dataDir, "studio.sqlite"));
@@ -39,6 +40,9 @@ for (const name of (await readdir(resolve("migrations")))
 }
 const port = Number(process.env.PORT ?? 8787);
 const env: Bindings = {
+  STUDIO_AGENTS_ENABLED: process.env.STUDIO_AGENTS_ENABLED,
+  STUDIO_AGENT_OWNER_ID: process.env.STUDIO_AGENT_OWNER_ID,
+  ...(process.env.STUDIO_AGENTS_ENABLED === 'true' ? { AGENT_RUNTIME: new NodeAgentRuntime(resolve(dataDir, 'agent-workspaces')) } : {}),
   GOOGLE_FONTS_API_KEY: (() => { const { env: variables } = process; return variables.GOOGLE_FONTS_API_KEY; })(),
   DB: db,
   ASSETS_BUCKET: new FileBucket(resolve(dataDir, "assets")),
@@ -68,6 +72,8 @@ const env: Bindings = {
       : "http://localhost:5173,http://127.0.0.1:5173"),
 };
 const bootstrapAdmin = await ensureBootstrapAdmin(env);
+// A restarted server never silently resubmits a paid turn.
+await db.exec("UPDATE agent_sessions SET status='interrupted' WHERE status IN ('running','waiting_permission','stopping','applying'); UPDATE agent_turns SET status='interrupted' WHERE status='running';");
 if (bootstrapAdmin) console.log(`Bootstrap admin account ${bootstrapAdmin.created ? 'created' : 'ready'}.`);
 const server = serve(
   {
@@ -95,8 +101,9 @@ const operationTimer=setInterval(async()=>{
   catch(error){console.error('Operation runner failed',error instanceof Error?error.name:'unknown');}
   finally{operationRunning=false;}
 },1000);
-const shutdown = () => {
+const shutdown = async () => {
   clearInterval(operationTimer);
+  await env.AGENT_RUNTIME?.close();
   server.close(() => {
     db.close();
     process.exit(0);

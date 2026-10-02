@@ -53,6 +53,8 @@ import { googleRoutes } from "./google-slides";
 import { handleMcp } from "./mcp";
 import { exportRoutes } from './exports';
 import { conversationRoutes } from './conversations';
+import { agentRoutes } from './agents';
+import { agentSchemas } from '../src/shared/agents';
 import { githubRoutes, githubEnabled } from './github-login';
 import { documentSchema } from '../src/shared/schema';
 import { operationsSchema } from '../src/shared/operations';
@@ -193,7 +195,7 @@ app.get("/api/health", async (c) =>
     revision: await releaseRevision(c),
   }),
 );
-app.get('/api/schema', c => c.json({ visualInspection:z.toJSONSchema(visualInspectionSchema),workspaceInspection:z.toJSONSchema(workspaceInspectionSchema),community:communitySchemas(), operationJob:z.toJSONSchema(operationJobSchema),sceneCommands:z.toJSONSchema(sceneCommandSchema), supportedDocumentVersions: [1,2], paintingCommand:z.toJSONSchema(paintingCommandSchema), documentSave:z.toJSONSchema(documentWriteSchema), providers: builtInProviders, providerId: z.toJSONSchema(providerIdSchema), providerSettings: z.toJSONSchema(providerSettingsSchema), mediaInput: z.toJSONSchema(mediaInputSchema), generationInput: z.toJSONSchema(generationInputSchema), documentWrite:z.toJSONSchema(documentWriteSchema),motionProposal:z.toJSONSchema(motionProposalSchema),exportInput:z.toJSONSchema(exportOptionsSchema), providerInterview: z.toJSONSchema(providerInterviewSchema), document: z.toJSONSchema(documentSchema), operations: z.toJSONSchema(operationsSchema), designSystem: z.toJSONSchema(designSystemSchema), interview: z.toJSONSchema(interviewSchema), scope: z.toJSONSchema(scopeSchema), observabilityQuery: z.toJSONSchema(telemetryQuerySchema), clientEvent: z.toJSONSchema(clientEventSchema) }));
+app.get('/api/schema', c => c.json({ codingAgents:agentSchemas(), visualInspection:z.toJSONSchema(visualInspectionSchema),workspaceInspection:z.toJSONSchema(workspaceInspectionSchema),community:communitySchemas(), operationJob:z.toJSONSchema(operationJobSchema),sceneCommands:z.toJSONSchema(sceneCommandSchema), supportedDocumentVersions: [1,2], paintingCommand:z.toJSONSchema(paintingCommandSchema), documentSave:z.toJSONSchema(documentWriteSchema), providers: builtInProviders, providerId: z.toJSONSchema(providerIdSchema), providerSettings: z.toJSONSchema(providerSettingsSchema), mediaInput: z.toJSONSchema(mediaInputSchema), generationInput: z.toJSONSchema(generationInputSchema), documentWrite:z.toJSONSchema(documentWriteSchema),motionProposal:z.toJSONSchema(motionProposalSchema),exportInput:z.toJSONSchema(exportOptionsSchema), providerInterview: z.toJSONSchema(providerInterviewSchema), document: z.toJSONSchema(documentSchema), operations: z.toJSONSchema(operationsSchema), designSystem: z.toJSONSchema(designSystemSchema), interview: z.toJSONSchema(interviewSchema), scope: z.toJSONSchema(scopeSchema), observabilityQuery: z.toJSONSchema(telemetryQuerySchema), clientEvent: z.toJSONSchema(clientEventSchema) }));
 app.get('/api/catalog', c => c.json({ themes, templates, blocks }));
 app.get("/api/config", async (c) =>
   c.json({
@@ -290,6 +292,7 @@ app.route('/api/projects',operationRoutes);
 app.route('/api/projects', thumbnailRoutes);
 app.route('/api/projects', visualInspectionRoutes);
 app.route('/api/projects', conversationRoutes);
+app.route('/api', agentRoutes);
 app.route('/api/projects', briefRoutes);
 app.route('/api/projects', designStrategyRoutes);
 app.get('/api/projects/:id/checks', async c => {
