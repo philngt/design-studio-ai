@@ -2,6 +2,10 @@
 // Contract-only subprocess. Never installed or selected by production defaults.
 import {createInterface} from 'node:readline';
 import {createServer} from 'node:http';
+import {readFile} from 'node:fs/promises';
+import {join} from 'node:path';
+import {Client} from '@modelcontextprotocol/sdk/client/index.js';
+import {StdioClientTransport} from '@modelcontextprotocol/sdk/client/stdio.js';
 const args=process.argv.slice(2),session='fixture-session';
 if(args.includes('--acp')&&args.includes('--stdio'))throw new Error('Copilot ACP uses stdio implicitly, not a --stdio flag.');
 if(args.includes('--acp')&&process.env.STUDIO_DRAFT_URL){for(const flag of ['--allow-tool=studio','--deny-tool=read','--deny-tool=write','--deny-tool=shell','--deny-tool=url'])if(!args.includes(flag))throw new Error('Copilot draft tool permissions must be explicit.');}
@@ -9,12 +13,39 @@ if(process.env.DESIGN_STUDIO_API_KEY||process.env.ENCRYPTION_KEY)throw new Error
 if(args.includes('--version')){console.log('contract-fixture');process.exit(0);}
 if(args[0]==='models'){console.log('fixture/model');process.exit(0);}
 const write=value=>process.stdout.write(JSON.stringify(value)+'\n');
+let claudeMcp,claudeTransport,claudeReady=false,claudePolled=false;
+const closeMcp=async()=>{await claudeMcp?.close();await claudeTransport?.close();};
+for(const signal of ['SIGTERM','SIGINT'])process.once(signal,()=>{void closeMcp().finally(()=>process.exit(0));});
+async function claudeStatus(){
+  const config=JSON.parse(await readFile(join(process.env.HOME,'claude-fixture.json'),'utf8').catch(()=>'{}'));
+  if(config.status)return {mcpServers:[{name:'studio',status:config.status,error:'private fixture credential'}]};
+  if(!claudePolled){claudePolled=true;return {mcpServers:[{name:'studio',status:'pending'}]};}
+  if(!claudeMcp){
+    const server=JSON.parse(args[args.indexOf('--mcp-config')+1]).mcpServers.studio;
+    if(!args.includes('--strict-mcp-config')||args[args.indexOf('--tools')+1]!=='')throw new Error('Claude built-in tools must remain disabled.');
+    claudeMcp=new Client({name:'claude-protocol-fixture',version:'1.0.0'});
+    claudeTransport=new StdioClientTransport({...server,env:{...process.env,...server.env},cwd:process.cwd(),stderr:'ignore'});
+    await claudeMcp.connect(claudeTransport);
+  }
+  const {tools}=await claudeMcp.listTools();
+  claudeReady=true;
+  return {mcpServers:[{name:'studio',status:'connected',tools:tools.map(({name})=>({name}))}]};
+}
 async function edit(){
   const call=async(name,input)=>{
+    if(claudeMcp){
+      const result=await claudeMcp.callTool({name,arguments:input});
+      if(result.isError)throw new Error('MCP rejected fixture tool.');
+      return JSON.parse(result.content[0].text);
+    }
     const response=await fetch(process.env.STUDIO_DRAFT_URL,{method:'POST',headers:{Authorization:`Bearer ${process.env.STUDIO_DRAFT_TOKEN}`,'Content-Type':'application/json'},body:JSON.stringify({name,input})});
     if(!response.ok)throw new Error('Gateway rejected fixture tool.');return response.json();
   };
   if(process.env.STUDIO_AGENT_PURPOSE==='interview'){
+    if(claudeMcp){
+      const tools=await claudeMcp.listTools();
+      if(tools.tools.some(tool=>tool.name==='studio_edit'))throw new Error('Interview MCP exposed design tools.');
+    }
     const blocked=await fetch(process.env.STUDIO_DRAFT_URL,{method:'POST',headers:{Authorization:`Bearer ${process.env.STUDIO_DRAFT_TOKEN}`,'Content-Type':'application/json'},body:JSON.stringify({name:'studio_edit',input:{version:0,operations:[{op:'rename',name:'Forbidden'}]}})});
     if(blocked.ok)throw new Error('Interview gateway exposed design tools.');
     const context=await call('studio_brief_context',{});
@@ -56,7 +87,7 @@ if(args[0]==='serve'){
     }
     if(method==='control_request'){
       const subtype=input.request.subtype;
-      write({type:'control_response',response:{subtype:'success',request_id:input.request_id,response:subtype==='initialize'?{commands:[],agents:[],models:[{value:'fixture-model',displayName:'Fixture',description:'Contract test'}]}:subtype==='list_models'?{models:[{value:'fixture-model',displayName:'Fixture',description:'Contract test'}]}:{}}});continue;
+      write({type:'control_response',response:{subtype:'success',request_id:input.request_id,response:subtype==='mcp_status'?await claudeStatus():subtype==='initialize'?{commands:[],agents:[],models:[{value:'fixture-model',displayName:'Fixture',description:'Contract test'}]}:subtype==='list_models'?{models:[{value:'fixture-model',displayName:'Fixture',description:'Contract test'}]}:{}}});continue;
     }
     if(method==='initialize'){reply(input,copilot?{protocolVersion:1,agentCapabilities:{loadSession:true}}:{capabilities:{}});continue;}
     if(method==='model/list'){reply(input,{data:[{id:'fixture-model'}]});continue;}
@@ -66,6 +97,7 @@ if(args[0]==='serve'){
     if(method==='thread/start'||method==='thread/resume'){reply(input,{thread:{id:session}});continue;}
     if(method==='get_state'){reply(input,{sessionFile:'/fixture/session.jsonl'});continue;}
     if(method==='turn/start'||method==='prompt'||method==='session/prompt'||method==='user'){
+      if(method==='user'&&!claudeReady)throw new Error('Claude received a prompt before Studio tools were connected.');
       if(JSON.stringify(input).includes('hold')){if(pi||codex)reply(input,{});continue;}
       await edit();
       if(codex){reply(input,{turn:{id:'fixture-turn'}});write({method:'item/agentMessage/delta',params:{delta:'Protocol fixture text'}});write({method:'turn/completed',params:{turn:{status:'completed'}}});}
@@ -76,4 +108,5 @@ if(args[0]==='serve'){
     }
     if(input.id!==undefined)reply(input,{});
   }
+  await closeMcp();
 }

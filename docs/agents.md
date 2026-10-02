@@ -6,6 +6,8 @@ Design Studio AI exposes one shared document contract through REST, network MCP,
 
 To use Claude Code, Codex, Copilot, OpenCode or Pi **inside the editor**, see [coding-agent setup and draft review](coding-agents.md). This opt-in Node workflow uses the designated owner's server CLI credentials, not a user's saved BYOK connection or ordinary MCP OAuth scope.
 
+Claude checks the session's Studio MCP connection and tool inventory before sending a prompt. An `agent_tools_unavailable` error event means that check failed without sending the prompt or changing saved state. Ask the operator to fix CLI/MCP setup before an explicitly requested new turn; reload and an exact request-ID retry do not rerun it.
+
 Follow the [CLI installation instructions](../README.md#agent-access) for the released tarball. The package is not published to the npm registry.
 
 To build from source, install dependencies with `npm ci` and `npm ci --prefix packages/cli`, then run `npm run build --prefix packages/cli`. From `packages/cli`, run `npm pack`; install the resulting tarball with `npm install -g <path-to-tarball>`. The build also generates `dist/document.schema.json` and `dist/operations.schema.json`.
